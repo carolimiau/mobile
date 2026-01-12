@@ -1,7 +1,7 @@
 import { Platform } from 'react-native';
 
 // Allow overriding local IP via Expo public env var
-export const LOCAL_IP = process.env.EXPO_PUBLIC_LOCAL_IP || '192.168.0.18';
+export const LOCAL_IP = process.env.EXPO_PUBLIC_LOCAL_IP || '192.168.0.8';
 
 export const API_URL = Platform.OS === 'web' 
   ? 'http://localhost:3000/api' 

@@ -2,6 +2,7 @@ import { io, Socket } from 'socket.io-client';
 import { Platform } from 'react-native';
 import authService from './authService';
 import { SOCKET_URL } from '../constants/Config';
+import pushNotificationService from './pushNotificationService';
 
 class SocketService {
   private socket: Socket | null = null;
@@ -111,6 +112,17 @@ class SocketService {
     // Escuchar nuevos mensajes
     this.socket.on('new_message', (data) => {
       this.emit('new_message', data);
+      
+      // Mostrar notificación local si la app está abierta
+      if (data?.message) {
+        const actionUrl = `/(tabs)/chat-detail?userId=${data.senderId || data.userId}&userName=${encodeURIComponent(data.senderName || '')}`;
+        
+        pushNotificationService.sendLocalNotification(
+          data.senderName || 'Nuevo Mensaje',
+          data.message,
+          { type: 'message', actionUrl, ...data }
+        );
+      }
     });
 
     // Mensaje enviado confirmación
@@ -162,6 +174,26 @@ class SocketService {
     this.socket.on('inspection_assigned', (data) => {
       console.log('🔔 Nueva inspección asignada:', data);
       this.emit('inspection_assigned', data);
+      
+      const actionUrl = `/(mechanic)/inspection-detail?id=${data.id || data.inspectionId}`;
+
+      pushNotificationService.sendLocalNotification(
+        'Nueva Inspección',
+        'Se te ha asignado una nueva inspección',
+        { type: 'inspection', actionUrl, ...data }
+      );
+    });
+
+    // Notificación genérica (Admin/System)
+    this.socket.on('notification', (data) => {
+      console.log('🔔 Nueva notificación recibida:', data);
+      this.emit('notification', data);
+      
+      pushNotificationService.sendLocalNotification(
+        data.title || 'Nueva Notificación',
+        data.message || data.body || '',
+        { type: 'notification', ...data }
+      );
     });
   }
 

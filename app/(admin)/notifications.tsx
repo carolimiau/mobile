@@ -18,7 +18,7 @@ interface Notification {
   title: string;
   message: string;
   type: string;
-  isRead: boolean;
+  read: boolean;
   createdAt: string;
   actionUrl?: string;
   metadata?: any;
@@ -101,7 +101,7 @@ const NotificationItem = ({
 
   return (
     <TouchableOpacity
-      style={[styles.notificationItem, !item.isRead && styles.unreadItem]}
+      style={[styles.notificationItem, !item.read && styles.unreadItem]}
       onPress={() => onPress(item)}
       activeOpacity={0.7}
     >
@@ -114,7 +114,7 @@ const NotificationItem = ({
       </View>
       <View style={styles.contentContainer}>
         <View style={styles.headerRow}>
-          <Text style={[styles.itemTitle, !item.isRead && styles.unreadTitle]}>
+          <Text style={[styles.itemTitle, !item.read && styles.unreadTitle]}>
             {item.title}
           </Text>
           <Text style={styles.time}>
@@ -125,7 +125,7 @@ const NotificationItem = ({
           {cleanMessage(item.message)}
         </Text>
       </View>
-      {!item.isRead && <View style={styles.dot} />}
+      {!item.read && <View style={styles.dot} />}
     </TouchableOpacity>
   );
 };
@@ -161,11 +161,11 @@ export default function AdminNotificationsScreen() {
 
   const handleNotificationPress = async (notification: Notification) => {
     try {
-      if (!notification.isRead) {
+      if (!notification.read) {
         await apiService.patch(`/notifications/${notification.id}/read`);
         // Update local state
         setNotifications(prev => 
-          prev.map(n => n.id === notification.id ? { ...n, isRead: true } : n)
+          prev.map(n => n.id === notification.id ? { ...n, read: true } : n)
         );
       }
 

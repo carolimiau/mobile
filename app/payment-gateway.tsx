@@ -555,7 +555,13 @@ export default function PaymentGatewayScreen() {
 
   const handleContinue = () => {
     // Navigate to success screen or home
-    router.replace('/(tabs)/inspections'); 
+    if (serviceType === 'raw_publish') {
+      router.replace({ pathname: '/(tabs)', params: { tab: 'publications' } });
+    } else if (serviceType === 'inspection_publish') {
+      router.replace({ pathname: '/(tabs)/inspections', params: { tab: 'publications' } });
+    } else {
+      router.replace('/(tabs)/inspections'); 
+    }
   };
 
   if (paymentStatus === 'success') {

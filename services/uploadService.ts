@@ -106,7 +106,7 @@ class UploadService {
   }
 
   /**
-   * Sube un archivo a Cloudinary usando credenciales firmadas
+   * Sube un archivo a S3 usando URL firmada
    */
   async uploadFile(
     fileUri: string,
@@ -116,77 +116,45 @@ class UploadService {
     onProgress?: (progress: number) => void
   ): Promise<UploadedFile> {
     try {
-      // 1. Obtener credenciales firmadas del backend
+      console.log(`[UploadService] Getting presigned URL for ${fileName} (${fileType})`);
+      
+      // 1. Obtener URL firmada del backend
       const response = await apiService.post('/uploads/presigned-upload', {
         fileName,
         contentType: fileType,
         folder,
       });
 
-      // Obtener parámetros de Cloudinary
-      const uploadUrl = response.uploadUrl || response.url;
-      const signature = response.signature;
-      const timestamp = response.timestamp;
-      const api_key = response.api_key;
-      const publicId = response.publicId;
-      const publicUrl = response.publicUrl;
+      const { url, publicUrl, key } = response;
 
-      if (!uploadUrl) {
+      if (!url) {
         throw new Error('No se recibió URL de subida del servidor');
       }
 
-      // 2. Si es una URL de localhost (mock), simulamos la subida
-      if (uploadUrl.includes('localhost')) {
-        console.log('⚠️ [UploadService] Detectada URL mock (localhost). Simulando subida exitosa.');
-        return {
-          key: publicId,
-          publicUrl,
-          fileName,
-          fileType,
-        };
-      }
+      console.log(`[UploadService] Uploading to S3: ${url.substring(0, 50)}...`);
 
-      // 3. Preparar formulario multipart para Cloudinary
-      const formData = new FormData();
-      
-      // Agregar archivo
-      formData.append('file', {
-        uri: fileUri,
-        type: fileType,
-        name: fileName,
-      } as any);
-
-      // Agregar parámetros Cloudinary
-      formData.append('public_id', publicId);
-      formData.append('api_key', api_key);
-      formData.append('signature', signature);
-      formData.append('timestamp', timestamp.toString());
-      formData.append('folder', folder);
-
-      const uploadResponse = await FileSystem.uploadAsync(uploadUrl, fileUri, {
-        httpMethod: 'POST',
-        uploadType: FileSystem.FileSystemUploadType.MULTIPART,
-        fieldName: 'file',
-        parameters: {
-          public_id: publicId,
-          api_key: api_key,
-          signature: signature,
-          timestamp: timestamp.toString(),
-          folder: folder,
+      // 2. Subir archivo directamente a S3 con PUT
+      // Usamos FileSystem.uploadAsync para mejor manejo de archivos nativos
+      const uploadResponse = await FileSystem.uploadAsync(url, fileUri, {
+        httpMethod: 'PUT',
+        headers: {
+          'Content-Type': fileType,
         },
+        uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
       });
 
       if (uploadResponse.status !== 200) {
-        console.error('❌ [UploadService] Cloudinary Upload Failed:', {
+        console.error('❌ [UploadService] S3 Upload Failed:', {
           status: uploadResponse.status,
           body: uploadResponse.body,
-          headers: uploadResponse.headers,
         });
-        throw new Error(`Error al subir el archivo a Cloudinary (Status: ${uploadResponse.status})`);
+        throw new Error(`Error al subir el archivo a S3 (Status: ${uploadResponse.status})`);
       }
 
+      console.log('✅ [UploadService] Upload successful:', publicUrl);
+
       return {
-        key: publicId,
+        key,
         publicUrl,
         fileName,
         fileType,
@@ -198,28 +166,33 @@ class UploadService {
   }
 
   /**
-   * Sube múltiples archivos
+   * Sube múltiples archivos en paralelo
    */
   async uploadMultipleFiles(
     files: { uri: string; name: string; type: string }[],
     folder = 'uploads',
     onProgress?: (index: number, progress: number) => void
   ): Promise<UploadedFile[]> {
-    const uploadedFiles: UploadedFile[] = [];
+    console.log(`[UploadService] Starting parallel upload of ${files.length} files`);
+    
+    // Ejecutar todas las subidas en paralelo
+    const uploadPromises = files.map((file, index) => 
+      this.uploadFile(
+        file.uri, 
+        file.name, 
+        file.type, 
+        folder, 
+        (progress) => onProgress?.(index, progress)
+      )
+    );
 
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i];
-      const result = await this.uploadFile(
-        file.uri,
-        file.name,
-        file.type,
-        folder,
-        (progress) => onProgress?.(i, progress)
-      );
-      uploadedFiles.push(result);
+    try {
+      const results = await Promise.all(uploadPromises);
+      return results;
+    } catch (error) {
+      console.error('One or more uploads failed:', error);
+      throw error;
     }
-
-    return uploadedFiles;
   }
 
   /**

@@ -610,8 +610,10 @@ import { API_URL } from '../constants/Config';
   getStatusText(status: string): string {
     const statusTexts: { [key: string]: string } = {
       'completed': 'Completado',
-      'published': 'Disponible', // Traducción correcta
-      'publish': 'Disponible',   // Traducción para el estado actual que tienes
+      'published': 'Disponible',
+      'publish': 'Disponible',
+      'publicada': 'Disponible',
+      'publicada_verificada': 'Verificada',
       'available': 'Disponible',
       'pending': 'Pendiente',
       'in-progress': 'En Proceso',
@@ -916,6 +918,19 @@ import { API_URL } from '../constants/Config';
       return 0;
     }
   }
+
+  /**
+   * Actualizar token de push notificaciones
+   */
+  async updatePushToken(userId: string, pushToken: string) {
+    try {
+        console.log(`📡 [API] Updating push token for user ${userId}`);
+        await this.post(`/users/${userId}/push-token`, { pushToken });
+    } catch (error) {
+        console.error('Error updating push token:', error);
+    }
+  }
+
 
   /**
    * Marcar una notificación como leída

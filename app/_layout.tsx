@@ -2,14 +2,27 @@ import { Stack, useRouter } from "expo-router";
 import { useEffect } from "react";
 import * as Notifications from 'expo-notifications';
 import { StatusBar } from 'react-native';
+import pushNotificationService from '../services/pushNotificationService';
 
 export default function RootLayout() {
   const router = useRouter();
 
   useEffect(() => {
+    // 1. Register for permissions on startup
+    pushNotificationService.registerForPushNotificationsAsync();
+
+    // 2. Handle notification clicks
     const subscription = Notifications.addNotificationResponseReceivedListener(response => {
       const data = response.notification.request.content.data;
       console.log('🔔 Notification clicked (Root):', data);
+      
+      // Navigation logic based on data type
+      if (data?.type === 'inspection' && data?.inspectionId) {
+        // Navigate to inspection detail, for example (adjust route as needed)
+        // router.push({ pathname: "/(mechanic)/inspection-detail", params: { id: data.inspectionId } });
+         // For now, if we don't have a specific deep link structure, we can log it.
+         // If "actionUrl" exists from previous patterns, use it.
+      }
       
       if (data?.actionUrl) {
         try {

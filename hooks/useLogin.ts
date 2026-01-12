@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { useRouter } from 'expo-router';
 import { Alert } from 'react-native';
 import authService from '../services/authService';
-import { registerForPushNotificationsAsync } from '../services/pushNotificationService';
+import pushNotificationService from '../services/pushNotificationService';
+import apiService from '../services/apiService';
 import { UserRole } from '../types';
 
 export const useLogin = () => {
@@ -17,7 +18,10 @@ export const useLogin = () => {
 
     // Register for push notifications
     try {
-      await registerForPushNotificationsAsync();
+      const token = await pushNotificationService.registerForPushNotificationsAsync();
+      if (token && result.user?.id) {
+          await apiService.updatePushToken(result.user.id, token);
+      }
     } catch (error) {
       console.error('Error registering for push notifications:', error);
     }

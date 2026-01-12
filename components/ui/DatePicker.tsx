@@ -30,6 +30,7 @@ export const DatePicker: React.FC<DatePickerProps> = ({
   minimumDate
 }) => {
   const [show, setShow] = useState(false);
+  const [tempDate, setTempDate] = useState(new Date());
 
   const parseDate = (dateStr: string) => {
     if (!dateStr) return new Date();
@@ -44,14 +45,39 @@ export const DatePicker: React.FC<DatePickerProps> = ({
     return `${day}/${month}/${year}`;
   };
 
-  const handleChange = (event: any, selectedDate?: Date) => {
-    setShow(Platform.OS === 'ios');
-    if (selectedDate) {
-      onChange(formatDate(selectedDate));
-      if (Platform.OS === 'android') {
-        setShow(false);
+  const handleOpen = () => {
+    let date = parseDate(value);
+    
+    // Si la fecha actual es menor a la mínima, ajustamos a la mínima
+    if (minimumDate) {
+      // Comparar solo fechas sin horas
+      const current = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+      const min = new Date(minimumDate.getFullYear(), minimumDate.getMonth(), minimumDate.getDate());
+      if (current < min) {
+        date = new Date(minimumDate);
       }
     }
+    
+    setTempDate(date);
+    setShow(true);
+  };
+
+  const handleAndroidChange = (event: any, selectedDate?: Date) => {
+    setShow(false);
+    if (selectedDate) {
+      onChange(formatDate(selectedDate));
+    }
+  };
+
+  const handleIOSChange = (event: any, selectedDate?: Date) => {
+    if (selectedDate) {
+      setTempDate(selectedDate);
+    }
+  };
+
+  const handleIOSConfirm = () => {
+    onChange(formatDate(tempDate));
+    setShow(false);
   };
 
   return (
@@ -59,7 +85,7 @@ export const DatePicker: React.FC<DatePickerProps> = ({
       {label && <Text style={styles.label}>{label}</Text>}
       <TouchableOpacity
         style={[styles.input, error ? styles.inputError : null]}
-        onPress={() => setShow(true)}
+        onPress={handleOpen}
       >
         <Text style={[styles.valueText, !value && styles.placeholderText]}>
           {value || placeholder}
@@ -74,7 +100,7 @@ export const DatePicker: React.FC<DatePickerProps> = ({
           value={parseDate(value)}
           mode="date"
           display="default"
-          onChange={handleChange}
+          onChange={handleAndroidChange}
           maximumDate={maximumDate}
           minimumDate={minimumDate}
         />
@@ -91,15 +117,15 @@ export const DatePicker: React.FC<DatePickerProps> = ({
           <View style={styles.iosModalOverlay}>
             <View style={styles.iosModalContent}>
               <View style={styles.iosModalHeader}>
-                <TouchableOpacity onPress={() => setShow(false)}>
+                <TouchableOpacity onPress={handleIOSConfirm}>
                   <Text style={styles.iosModalButton}>Listo</Text>
                 </TouchableOpacity>
               </View>
               <DateTimePicker
-                value={parseDate(value)}
+                value={tempDate}
                 mode="date"
                 display="spinner"
-                onChange={handleChange}
+                onChange={handleIOSChange}
                 maximumDate={maximumDate}
                 minimumDate={minimumDate}
                 style={{ height: 200 }}

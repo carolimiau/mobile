@@ -8,7 +8,9 @@ import {
   RefreshControl,
   TouchableOpacity,
   Alert,
+  Platform,
 } from 'react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { Ionicons } from '@expo/vector-icons';
 import { Screen } from '../../components/ui/Screen';
 import { usePayments } from '../../hooks/usePayments';
@@ -22,11 +24,45 @@ export default function PaymentsScreen() {
     selectedFilter,
     setSelectedFilter,
     totalAmount,
+    startDate,
+    setStartDate,
+    endDate,
+    setEndDate,
     onRefresh,
     updatePaymentStatus,
   } = usePayments();
 
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [showPicker, setShowPicker] = useState(false);
+  const [pickerMode, setPickerMode] = useState<'start' | 'end'>('start');
+
+  const onDateChange = (event: any, selectedDate?: Date) => {
+    if (Platform.OS === 'android') {
+      setShowPicker(false);
+    }
+    
+    if (event.type === 'dismissed') {
+      return;
+    }
+
+    if (selectedDate) {
+      if (pickerMode === 'start') {
+        setStartDate(selectedDate);
+      } else {
+        setEndDate(selectedDate);
+      }
+    }
+  };
+
+  const showDatePicker = (mode: 'start' | 'end') => {
+    setPickerMode(mode);
+    setShowPicker(true);
+  };
+
+  const clearDates = () => {
+    setStartDate(null);
+    setEndDate(null);
+  };
 
   const renderFilterButton = (filter: typeof selectedFilter, label: string) => (
     <TouchableOpacity
@@ -176,6 +212,11 @@ export default function PaymentsScreen() {
             <Text style={styles.summaryAmount}>
               {paymentService.formatCurrency(totalAmount)}
             </Text>
+            {(startDate || endDate) && (
+              <Text style={styles.summarySubtext}>
+                (En periodo seleccionado)
+              </Text>
+            )}
           </View>
           <View style={styles.summaryDivider} />
           <View style={styles.summaryItem}>
@@ -191,6 +232,49 @@ export default function PaymentsScreen() {
           {renderFilterButton('incompleto', 'Incompletos')}
           {renderFilterButton('cancelado', 'Cancelados')}
         </View>
+
+        {/* Date Filter Controls */}
+        <View style={styles.dateFilterContainer}>
+          <TouchableOpacity 
+            style={styles.dateButton} 
+            onPress={() => showDatePicker('start')}
+          >
+            <Ionicons name="calendar-outline" size={16} color="#666" />
+            <Text style={styles.dateButtonText}>
+              {startDate ? startDate.toLocaleDateString('es-CL') : 'Desde'}
+            </Text>
+          </TouchableOpacity>
+
+          <Text style={styles.dateSeparator}>-</Text>
+          
+          <TouchableOpacity 
+            style={styles.dateButton} 
+            onPress={() => showDatePicker('end')}
+          >
+            <Ionicons name="calendar-outline" size={16} color="#666" />
+            <Text style={styles.dateButtonText}>
+              {endDate ? endDate.toLocaleDateString('es-CL') : 'Hasta'}
+            </Text>
+          </TouchableOpacity>
+
+          {(startDate || endDate) && (
+            <TouchableOpacity onPress={clearDates} style={styles.clearDateButton}>
+              <Ionicons name="close-circle" size={20} color="#F44336" />
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {showPicker && (
+          <DateTimePicker
+            testID="dateTimePicker"
+            value={pickerMode === 'start' ? (startDate || new Date()) : (endDate || new Date())}
+            mode="date"
+            is24Hour={true}
+            display="default"
+            onChange={onDateChange}
+            maximumDate={new Date()}
+          />
+        )}
 
         {/* List */}
         {loading && !refreshing ? (
@@ -266,6 +350,43 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
     color: '#007bff',
+  },
+  summarySubtext: {
+    fontSize: 10,
+    color: '#888',
+    marginTop: 2,
+  },
+  dateFilterContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    marginBottom: 12,
+    justifyContent: 'center',
+  },
+  dateButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#eee',
+    minWidth: 100,
+    justifyContent: 'center',
+  },
+  dateButtonText: {
+    marginLeft: 6,
+    color: '#333',
+    fontSize: 14,
+  },
+  dateSeparator: {
+    marginHorizontal: 8,
+    color: '#666',
+  },
+  clearDateButton: {
+    marginLeft: 12,
+    padding: 4,
   },
   filterContainer: {
     flexDirection: 'row',

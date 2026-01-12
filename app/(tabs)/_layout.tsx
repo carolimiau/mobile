@@ -10,7 +10,6 @@ import {
 import { HeaderProvider, useHeader } from '../../contexts/HeaderContext';
 import { ChatProvider, useChat } from '../../contexts/ChatContext';
 import { useEffect, useState, useCallback } from 'react';
-import { registerForPushNotificationsAsync } from '../../services/pushNotificationService';
 import apiService from '../../services/apiService';
 import { useFocusEffect } from 'expo-router';
 
@@ -20,10 +19,6 @@ function TabsContent() {
   const { isHeaderVisible } = useHeader();
   const { unreadMessagesCount } = useChat();
   const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0);
-
-  useEffect(() => {
-    registerForPushNotificationsAsync();
-  }, []);
 
   const fetchUnreadNotifications = async () => {
     try {

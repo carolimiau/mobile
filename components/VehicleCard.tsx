@@ -95,9 +95,23 @@ export const VehicleCard: React.FC<VehicleCardProps> = ({
             </Text>
             
             <View style={styles.statusBadge}>
-              <Text style={styles.statusText}>
-                {apiService.getStatusText(vehicle.estado || 'available')}
-              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                {vehicle.estado === 'Publicada_Verificada' && (
+                  <View style={{
+                    backgroundColor: '#1E90FF', // Azul tipo Instagram
+                    borderRadius: 10,
+                    width: 16,
+                    height: 16,
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                  }}>
+                    <Ionicons name="checkmark" size={10} color="#FFF" />
+                  </View>
+                )}
+                <Text style={styles.statusText}>
+                  {apiService.getStatusText(vehicle.estado || 'available')}
+                </Text>
+              </View>
             </View>
           </View>
           

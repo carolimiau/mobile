@@ -44,7 +44,6 @@ export const MechanicCard: React.FC<MechanicCardProps> = ({
         
         <View style={styles.infoContainer}>
           <Text style={styles.name}>{mechanic.firstName} {mechanic.lastName}</Text>
-          <Text style={styles.specialization}>{mechanic.specialization || 'Sin especialización'}</Text>
           <View style={styles.ratingContainer}>
             <Ionicons name="star" size={16} color="#FFD700" />
             <Text style={styles.rating}>{mechanic.rating?.toFixed(1) || 'N/A'}</Text>

@@ -10,7 +10,7 @@ import {
   TouchableOpacity,
   Dimensions
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { Screen } from '../../components/ui/Screen';
@@ -88,9 +88,17 @@ const TabSelector = ({ activeTab, onTabChange }: { activeTab: string, onTabChang
 
 export default function HomeScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams();
   const { balance, refresh: refreshWallet } = useWallet();
   const [user, setUser] = useState<any>(null);
   const [activeTab, setActiveTab] = useState('latest');
+
+  // Handle tab param
+  useEffect(() => {
+    if (params.tab && typeof params.tab === 'string' && ['latest', 'publications', 'favorites'].includes(params.tab)) {
+      setActiveTab(params.tab);
+    }
+  }, [params.tab]);
   
   // Data Hooks
   const latestFeed = useVehicleFeed();

@@ -21,8 +21,8 @@ class TTSService {
       
       console.log('🎤 Iniciando TTS...');
       
-      // Iniciar música de fondo suave
-      await this.startBackgroundMusic();
+      // Iniciar música de fondo suave (No bloquear el habla si la música tarda)
+      this.startBackgroundMusic().catch(err => console.log('⚠️ Error música async:', err));
       
       return Speech.speak(text, {
         language: 'es-MX', // Español de México

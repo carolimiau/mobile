@@ -13,7 +13,6 @@ import { useEffect, useState } from 'react';
 import authService from '../../services/authService';
 import socketService from '../../services/socketService';
 import apiService from '../../services/apiService';
-import { registerForPushNotificationsAsync } from '../../services/pushNotificationService';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function MechanicLayout() {
@@ -21,7 +20,6 @@ export default function MechanicLayout() {
   const [notificationCount, setNotificationCount] = useState(0);
 
   useEffect(() => {
-    registerForPushNotificationsAsync();
     fetchUnreadNotifications();
   }, []);
 

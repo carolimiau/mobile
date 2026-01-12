@@ -247,6 +247,54 @@ export function usePublishWithInspection() {
   };
 
   const handleImagePick = async () => {
+    Alert.alert(
+      'Seleccionar Imagen',
+      'Elige una opción',
+      [
+        {
+          text: 'Tomar Foto',
+          onPress: openCamera,
+        },
+        {
+          text: 'Galería',
+          onPress: openGallery,
+        },
+        {
+          text: 'Cancelar',
+          style: 'cancel',
+        },
+      ]
+    );
+  };
+
+  const openCamera = async () => {
+    try {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permiso denegado', 'Se requiere permiso para acceder a la cámara.');
+        return;
+      }
+
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets) {
+        const newImages = result.assets.map(asset => ({
+          uri: asset.uri,
+          name: asset.fileName || `camera_${Date.now()}.jpg`,
+          type: 'image/jpeg',
+        }));
+        setSelectedImages(prev => [...prev, ...newImages]);
+      }
+    } catch (error) {
+      console.error('Error camera:', error);
+      Alert.alert('Error', 'No se pudo abrir la cámara');
+    }
+  };
+
+  const openGallery = async () => {
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,

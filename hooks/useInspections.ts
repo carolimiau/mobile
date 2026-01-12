@@ -1,16 +1,23 @@
-import { useState, useCallback } from 'react';
-import { useFocusEffect } from 'expo-router';
+import { useState, useCallback, useEffect } from 'react';
+import { useFocusEffect, useLocalSearchParams } from 'expo-router';
 import apiService from '../services/apiService';
 import authService from '../services/authService';
 import { Inspection } from '../types';
 
 export function useInspections() {
+  const params = useLocalSearchParams();
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [myInspections, setMyInspections] = useState<Inspection[]>([]);
   const [myPublicationInspections, setMyPublicationInspections] = useState<Inspection[]>([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState<'requests' | 'publications'>('requests');
+
+  useEffect(() => {
+    if (params.tab && (params.tab === 'requests' || params.tab === 'publications')) {
+      setActiveTab(params.tab as 'requests' | 'publications');
+    }
+  }, [params.tab]);
 
   const checkAuth = async () => {
     const auth = await authService.isAuthenticated();

@@ -55,9 +55,11 @@ export default function AdminMechanicsScreen() {
   };
 
   const handleMechanicPress = (mechanic: Mechanic) => {
-    // Navigate to details or edit?
-    // For now, maybe just expand
-    toggleMechanicInspections(mechanic.id);
+    // Navigate to profile details
+    router.push({
+      pathname: '/(admin)/mechanic-detail',
+      params: { id: mechanic.id }
+    });
   };
 
   const handleSchedulePress = (mechanic: Mechanic) => {

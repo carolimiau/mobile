@@ -57,10 +57,15 @@ export default function VehiclePreviewScreen() {
   }, [vehicle]);
 
   useEffect(() => {
+    // Retrasar el inicio para asegurar que la UI esté lista
+    let timeout: ReturnType<typeof setTimeout>;
     if (!loading && vehicle && narrationText && !muted) {
-      ttsService.speak(narrationText).catch(() => {});
+      timeout = setTimeout(() => {
+        ttsService.speak(narrationText).catch(e => console.log('Error TTS', e));
+      }, 500); 
     }
     return () => {
+      clearTimeout(timeout);
       ttsService.stop();
     };
   }, [loading, vehicle, narrationText, muted]);
@@ -102,7 +107,9 @@ export default function VehiclePreviewScreen() {
           data={images}
           keyExtractor={(uri, idx) => `${uri}-${idx}`}
           renderItem={({ item }) => (
-            <Image source={{ uri: item }} style={styles.image} resizeMode="cover" />
+            <TouchableOpacity activeOpacity={0.9} onPress={goToDetails}>
+              <Image source={{ uri: item }} style={styles.image} resizeMode="cover" />
+            </TouchableOpacity>
           )}
           horizontal
           pagingEnabled

@@ -1,9 +1,10 @@
 import React from 'react';
-import { View, Text, StyleSheet, FlatList, RefreshControl, TouchableOpacity, Image } from 'react-native';
+import { View, Text, StyleSheet, FlatList, RefreshControl, TouchableOpacity, Image, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { Screen } from '../../components/ui/Screen';
 import { useNotifications } from '../../hooks/useNotifications';
+import apiService from '../../services/apiService';
 
 export default function NotificationsScreen() {
   const router = useRouter();
@@ -65,8 +66,24 @@ export default function NotificationsScreen() {
     return date.toLocaleDateString('es-CL', { day: '2-digit', month: 'short' });
   };
 
-  const handleNotificationPress = (item: any) => {
+  const handleNotificationPress = async (item: any) => {
     markAsRead(item.id);
+
+    // Verificar si la inspección está pendiente sin mecánico asignado
+    if (item.relatedId && ['crear_insp', 'crear_pub_insp', 'solicitar_mec'].includes(item.type)) {
+      try {
+        const inspection = await apiService.getInspectionById(item.relatedId);
+        if (inspection && inspection.estado_insp === 'Pendiente' && !inspection.mecanicoId) {
+          Alert.alert(
+            'Solicitud Pendiente',
+            'Tu solicitud ha sido recibida y está a la espera de ser asignada a un mecánico. Te notificaremos cuando alguien acepte tu solicitud.'
+          );
+          return;
+        }
+      } catch (e) {
+        console.error('Error verificando estado de inspección:', e);
+      }
+    }
     
     if (item.actionUrl) {
       try {

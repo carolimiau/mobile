@@ -13,7 +13,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import authService from '../../services/authService';
 import apiService from '../../services/apiService';
 import { useEffect, useState, useCallback } from 'react';
-import { registerForPushNotificationsAsync } from '../../services/pushNotificationService';
 import { useFocusEffect } from '@react-navigation/native';
 
 export default function AdminLayout() {
@@ -21,15 +20,10 @@ export default function AdminLayout() {
   const segments = useSegments();
   const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0);
 
-  useEffect(() => {
-    registerForPushNotificationsAsync();
-  }, []);
-
   const fetchUnreadNotifications = async () => {
     try {
-      // TODO: Implement getUnreadNotificationsCount in apiService or adminService
-      // const count = await apiService.getUnreadNotificationsCount();
-      // setUnreadNotificationsCount(count);
+      const count = await apiService.getUnreadNotificationsCount();
+      setUnreadNotificationsCount(count);
     } catch (error) {
       console.error('Error fetching unread notifications:', error);
     }
@@ -38,7 +32,8 @@ export default function AdminLayout() {
   useFocusEffect(
     useCallback(() => {
       fetchUnreadNotifications();
-      const interval = setInterval(fetchUnreadNotifications, 30000);
+      // Poll every 5 seconds for admin to be responsive
+      const interval = setInterval(fetchUnreadNotifications, 5000);
       return () => clearInterval(interval);
     }, [])
   );
@@ -132,7 +127,28 @@ export default function AdminLayout() {
           options={{
             title: 'Publicaciones',
             tabBarIcon: ({ color, size }) => (
-              <Ionicons name="document-text" size={size} color={color} />
+              <View>
+                <Ionicons name="document-text" size={size} color={color} />
+                {unreadNotificationsCount > 0 && (
+                  <View style={{
+                    position: 'absolute',
+                    right: -6,
+                    top: -3,
+                    backgroundColor: 'red',
+                    borderRadius: 8,
+                    width: 16,
+                    height: 16,
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    borderWidth: 1,
+                    borderColor: 'white'
+                  }}>
+                    <Text style={{ color: 'white', fontSize: 10, fontWeight: 'bold' }}>
+                      {unreadNotificationsCount > 9 ? '9+' : unreadNotificationsCount}
+                    </Text>
+                  </View>
+                )}
+              </View>
             ),
           }} 
         />
@@ -178,10 +194,47 @@ export default function AdminLayout() {
           }} 
         />
         <Tabs.Screen 
-          name="notifications" 
+          name="mechanic-detail" 
           options={{ 
             href: null,
             tabBarStyle: { display: 'none' }
+          }} 
+        />
+        <Tabs.Screen 
+          name="mechanic-inspections" 
+          options={{ 
+            href: null,
+            tabBarStyle: { display: 'none' }
+          }} 
+        />
+        <Tabs.Screen 
+          name="notifications" 
+          options={{
+            title: 'Notificaciones',
+            tabBarIcon: ({ color, size }) => (
+              <View>
+                <Ionicons name="notifications" size={size} color={color} />
+                {unreadNotificationsCount > 0 && (
+                  <View style={{
+                    position: 'absolute',
+                    right: -6,
+                    top: -3,
+                    backgroundColor: 'red',
+                    borderRadius: 8,
+                    width: 16,
+                    height: 16,
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    borderWidth: 1,
+                    borderColor: 'white'
+                  }}>
+                    <Text style={{ color: 'white', fontSize: 10, fontWeight: 'bold' }}>
+                      {unreadNotificationsCount > 9 ? '9+' : unreadNotificationsCount}
+                    </Text>
+                  </View>
+                )}
+              </View>
+            ),
           }} 
         />
       </Tabs>

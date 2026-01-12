@@ -122,7 +122,9 @@ export default function PublishWithInspectionScreen() {
         value={formData.kilometers}
         onChangeText={(text) => {
           // Remover todo excepto números
-          const numbers = text.replace(/[^0-9]/g, '');
+          let numbers = text.replace(/[^0-9]/g, '');
+          // Remover ceros a la izquierda
+          numbers = numbers.replace(/^0+/, '');
           // Formatear con puntos de miles
           const formatted = numbers.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
           updateFormData('kilometers', formatted);
@@ -248,7 +250,9 @@ export default function PublishWithInspectionScreen() {
           value={formData.price}
           onChangeText={(text) => {
             // Remover todo excepto números
-            const numbers = text.replace(/[^0-9]/g, '');
+            let numbers = text.replace(/[^0-9]/g, '');
+            // Remover ceros a la izquierda
+            numbers = numbers.replace(/^0+/, '');
             // Formatear con puntos de miles
             const formatted = numbers.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
             updateFormData('price', formatted);
