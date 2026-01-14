@@ -48,6 +48,52 @@ export default function MechanicDetailScreen() {
     }
   };
 
+  const handleFirstNameChange = (text: string) => {
+    // Solo permitir letras y espacios (incluyendo tildes y ñ)
+    if (/^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]*$/.test(text)) {
+      setFirstName(text);
+    }
+  };
+
+  const handleLastNameChange = (text: string) => {
+    // Solo permitir letras y espacios (incluyendo tildes y ñ)
+    if (/^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]*$/.test(text)) {
+      setLastName(text);
+    }
+  };
+
+  const handlePhoneChange = (text: string) => {
+    let digits = text.replace(/\D/g, '');
+    
+    // Si borran el prefijo 569, lo restauramos
+    if (digits.length < 3) {
+        digits = '569';
+    }
+    
+    // Si pegan un número sin prefijo, agregamos 569
+    if (!digits.startsWith('569')) {
+        digits = '569' + digits;
+    }
+    
+    // Limitar a 11 dígitos (56 9 XXXX XXXX)
+    if (digits.length > 11) {
+        digits = digits.slice(0, 11);
+    }
+    
+    // Formatear: +56 9 XXXX XXXX
+    let formatted = '+56 9 ';
+    const rest = digits.slice(3);
+    
+    if (rest.length > 0) {
+        formatted += rest.slice(0, 4);
+        if (rest.length > 4) {
+            formatted += ' ' + rest.slice(4, 8);
+        }
+    }
+    
+    setPhone(formatted);
+  };
+
   const handleImageSelected = (uri: string) => {
     setProfilePhoto(uri);
   };
@@ -60,6 +106,7 @@ export default function MechanicDetailScreen() {
         firstName,
         lastName,
         phone,
+        email,
         profilePhoto,
       });
       Alert.alert('Éxito', 'Información actualizada correctamente');
@@ -80,6 +127,14 @@ export default function MechanicDetailScreen() {
     });
   };
 
+  const handleViewPayments = () => {
+    if (!mechanic) return;
+    router.push({
+      pathname: '/(admin)/mechanic-payments',
+      params: { mechanicId: mechanic.id, mechanicName: `${mechanic.firstName} ${mechanic.lastName}` }
+    });
+  };
+
   if (loading) {
     return (
       <Screen>
@@ -93,7 +148,7 @@ export default function MechanicDetailScreen() {
   if (!mechanic) return null;
 
   return (
-    <Screen style={styles.container}>
+    <Screen style={styles.container} backgroundColor="#fff">
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color="#333" />
@@ -102,7 +157,7 @@ export default function MechanicDetailScreen() {
         <View style={{ width: 40 }} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView contentContainerStyle={styles.content} style={{ backgroundColor: '#F8F9FA' }}>
         
         {/* Avatar Section */}
         <View style={styles.avatarSection}>
@@ -123,11 +178,24 @@ export default function MechanicDetailScreen() {
           <Text style={styles.sectionTitle}>Información Personal</Text>
           
           <View style={styles.inputGroup}>
+            <Text style={styles.label}>Email</Text>
+            <TextInput
+              style={styles.input}
+              value={email}
+              onChangeText={setEmail}
+              placeholder="Email"
+              keyboardType="email-address"
+              autoCapitalize="none"
+              editable={false}
+            />
+          </View>
+
+          <View style={styles.inputGroup}>
             <Text style={styles.label}>Nombre</Text>
             <TextInput
               style={styles.input}
               value={firstName}
-              onChangeText={setFirstName}
+              onChangeText={handleFirstNameChange}
               placeholder="Nombre"
             />
           </View>
@@ -137,7 +205,7 @@ export default function MechanicDetailScreen() {
             <TextInput
               style={styles.input}
               value={lastName}
-              onChangeText={setLastName}
+              onChangeText={handleLastNameChange}
               placeholder="Apellido"
             />
           </View>
@@ -147,8 +215,9 @@ export default function MechanicDetailScreen() {
             <TextInput
               style={styles.input}
               value={phone}
-              onChangeText={setPhone}
+              onChangeText={handlePhoneChange}
               keyboardType="phone-pad"
+              maxLength={15}
               placeholder="+56 9 ..."
             />
           </View>
@@ -173,6 +242,17 @@ export default function MechanicDetailScreen() {
             <View style={styles.actionContent}>
               <Text style={styles.actionTitle}>Ver Inspecciones</Text>
               <Text style={styles.actionSubtitle}>Historial completo de trabajos</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color="#999" />
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.actionCard} onPress={handleViewPayments}>
+            <View style={[styles.iconBox, { backgroundColor: '#E8F5E9' }]}>
+              <Ionicons name="wallet-outline" size={24} color="#4CAF50" />
+            </View>
+            <View style={styles.actionContent}>
+              <Text style={styles.actionTitle}>Ver Pagos</Text>
+              <Text style={styles.actionSubtitle}>Manejar transacciones y comprobantes</Text>
             </View>
             <Ionicons name="chevron-forward" size={20} color="#999" />
           </TouchableOpacity>

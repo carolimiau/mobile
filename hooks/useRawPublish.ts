@@ -233,7 +233,7 @@ export const useRawPublish = () => {
 
       // Navigate to payment gateway
       router.push({
-        pathname: '/payment-gateway',
+        pathname: '/(tabs)/publish/payment-gateway',
         params: {
           amount: publicationPrice.toString(),
           description: 'Publicación Estándar',

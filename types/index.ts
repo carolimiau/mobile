@@ -75,6 +75,16 @@ export interface Payment {
   fechaActualizacion?: string;
 }
 
+export interface MechanicPayment {
+  id: number;
+  mecanico_id: string;
+  monto: number;
+  fecha_pago: string;
+  comprobante_url: string;
+  nota?: string;
+  created_at: string;
+}
+
 export interface Message {
   id: string;
   remitenteId: string;

@@ -1,5 +1,5 @@
 import apiService from './apiService';
-import { Payment } from '../types';
+import { Payment, MechanicPayment } from '../types';
 
 // Original maps (kept human-readable)
 const STATUS_API_MAP: Record<string, string> = {
@@ -104,6 +104,19 @@ class PaymentService {
     }
   }
 
+  async getMechanicPayouts(mechanicId: string): Promise<MechanicPayment[]> {
+    try {
+      const response = await apiService.fetch(`/mechanics/${mechanicId}/payouts`, {
+        method: 'GET',
+        requiresAuth: true,
+      });
+      return response;
+    } catch (error) {
+      console.error('Error fetching mechanic payouts:', error);
+      throw error;
+    }
+  }
+
   async getPayment(id: string): Promise<Payment> {
     try {
       const response = await apiService.fetch(`/payments/${id}`, {
@@ -114,6 +127,18 @@ class PaymentService {
     } catch (error) {
       console.error('Error fetching payment:', error);
       throw error;
+    }
+  }
+
+  async getFinancialSummary(): Promise<{ totalConfirmed: number; totalUserBalance: number }> {
+    try {
+      return await apiService.fetch('/payments/summary', {
+        method: 'GET',
+        requiresAuth: true,
+      });
+    } catch (error) {
+      console.error('Error fetching financial summary:', error);
+      return { totalConfirmed: 0, totalUserBalance: 0 };
     }
   }
 

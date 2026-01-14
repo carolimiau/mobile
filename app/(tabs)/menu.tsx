@@ -54,7 +54,7 @@ export default function MenuScreen() {
       icon: 'help-circle-outline',
       title: 'Ayuda y Soporte',
       subtitle: 'Centro de ayuda',
-      onPress: () => Alert.alert('Próximamente', 'Función en desarrollo'),
+      onPress: () => Alert.alert('Ayuda y Soporte', 'Contáctanos en:\n\nCorreo: soporte@autobox.cl\nTeléfono: +56 9 1234 5678'),
     },
     {
       icon: 'information-circle-outline',

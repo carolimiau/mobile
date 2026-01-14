@@ -89,7 +89,7 @@ export default function MechanicInspectionsScreen() {
   };
 
   return (
-    <Screen style={styles.container}>
+    <Screen style={styles.container} backgroundColor="#fff">
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color="#333" />
@@ -106,34 +106,36 @@ export default function MechanicInspectionsScreen() {
           <ActivityIndicator size="large" color="#007bff" />
         </View>
       ) : (
-        <FlatList
-          data={inspections}
-          keyExtractor={(item) => item.id}
-          renderItem={({ item }) => (
-            <InspectionCard 
-              inspection={item} 
-              onPress={() => handleInspectionPress(item)}
-              showMechanic={false} // We know the mechanic
-            />
-          )}
-          contentContainerStyle={styles.listContent}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-          }
-          ListEmptyComponent={
-            <View style={styles.emptyContainer}>
-              <Ionicons name="clipboard-outline" size={48} color="#CCC" />
-              <Text style={styles.emptyText}>Este mecánico no tiene inspecciones asignadas.</Text>
-            </View>
-          }
-        />
+        <View style={{ flex: 1, backgroundColor: '#F5F5F5' }}>
+          <FlatList
+            data={inspections}
+            keyExtractor={(item) => item.id}
+            renderItem={({ item }) => (
+              <InspectionCard 
+                inspection={item} 
+                onPress={() => handleInspectionPress(item)}
+                showMechanic={false} // We know the mechanic
+              />
+            )}
+            contentContainerStyle={styles.listContent}
+            refreshControl={
+              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+            }
+            ListEmptyComponent={
+              <View style={styles.emptyContainer}>
+                <Ionicons name="clipboard-outline" size={48} color="#CCC" />
+                <Text style={styles.emptyText}>Este mecánico no tiene inspecciones asignadas.</Text>
+              </View>
+            }
+          />
+        </View>
       )}
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F5F5F5' },
+  container: { flex: 1 },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   header: {
     flexDirection: 'row',

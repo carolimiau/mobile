@@ -97,8 +97,9 @@ class AuthService {
       });
       
       const result = await response.json();
+      console.log('Forgot password API result:', result);
       if (!response.ok) throw new Error(result.message || 'Error al solicitar recuperación');
-      return result;
+      return result || {}; // Ensure it never returns undefined/null
     } catch (error) {
        console.error('Error in forgotPassword:', error);
        throw error;

@@ -117,7 +117,7 @@ export default function ScheduleInspectionScreen() {
     });
 
     router.push({
-      pathname: '/payment-gateway',
+      pathname: '/(tabs)/publish/payment-gateway',
       params: {
         amount: inspectionPrice.toString(),
         description: 'Inspección AutoBox',

@@ -138,9 +138,6 @@ function TabsContent() {
         <Tabs.Screen name="chat-detail" options={{ href: null }} />
         <Tabs.Screen name="notifications" options={{ href: null }} />
         <Tabs.Screen name="wallet" options={{ href: null }} />
-        <Tabs.Screen name="publish-with-inspection" options={{ href: null }} />
-        <Tabs.Screen name="publish-with-inspection_payment" options={{ href: null }} />
-        <Tabs.Screen name="raw-publish" options={{ href: null }} />
       </Tabs>
     </>
   );

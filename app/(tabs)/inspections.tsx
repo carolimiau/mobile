@@ -38,7 +38,7 @@ export default function InspectionsScreen() {
           <Button
             title="Solicitar Inspección como Invitado"
             variant="outline"
-            onPress={() => router.push('/(tabs)/publish-with-inspection')} 
+            onPress={() => router.push('/(tabs)/publish/publish-with-inspection')} 
             style={styles.button}
           />
         </View>
@@ -79,10 +79,14 @@ export default function InspectionsScreen() {
         renderItem={({ item }) => (
           <InspectionCard
             inspection={item}
-            onPress={() => router.push({
-              pathname: '/user-inspection-detail',
-              params: { id: item.id }
-            })}
+            onPress={
+              item.estado_insp === 'Pendiente'
+                ? undefined
+                : () => router.push({
+                    pathname: '/user-inspection-detail',
+                    params: { id: item.id }
+                  })
+            }
           />
         )}
         contentContainerStyle={styles.listContent}

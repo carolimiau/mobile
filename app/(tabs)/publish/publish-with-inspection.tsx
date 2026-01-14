@@ -1,24 +1,16 @@
 import React from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  KeyboardAvoidingView,
-  Platform,
-  ActivityIndicator,
-  TouchableOpacity,
-} from 'react-native';
+import { View, Text, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { Screen } from '../../components/ui/Screen';
-import { Input } from '../../components/ui/Input';
-import { Button } from '../../components/ui/Button';
-import { Select } from '../../components/ui/Select';
-import { ImageUploader } from '../../components/ui/ImageUploader';
-import { useRawPublish } from '../../hooks/useRawPublish';
+import { Screen } from '../../../components/ui/Screen';
+import { Button } from '../../../components/ui/Button';
+import { Input } from '../../../components/ui/Input';
+import { Select } from '../../../components/ui/Select';
+import { DatePicker } from '../../../components/ui/DatePicker';
+import { ImageUploader } from '../../../components/ui/ImageUploader';
+import { usePublishWithInspection } from '../../../hooks/usePublishWithInspection';
 
-export default function RawPublishScreen() {
+export default function PublishWithInspectionScreen() {
   const router = useRouter();
   const {
     currentStep,
@@ -27,15 +19,24 @@ export default function RawPublishScreen() {
     handlePlateChange,
     loadingPlateData,
     plateValid,
-    nextStep,
-    prevStep,
-    handleImagesUploaded,
-    publish,
     loading,
-    isEditMode,
-  } = useRawPublish();
+    loadingModels,
+    loadingSlots,
+    availableModels,
+    availableTimeSlots,
+    selectedImages,
+    handleImagePick,
+    handleRemoveImage,
+    handleNext,
+    handleBack,
+    handleSubmit,
+    inspectionPrice,
+    publicationPrice,
+    autoBoxLocations,
+    isEditMode
+  } = usePublishWithInspection();
 
-  const totalSteps = 5;
+  const totalSteps = 6;
 
   const renderStep1 = () => (
     <View>
@@ -45,7 +46,7 @@ export default function RawPublishScreen() {
       </Text>
       <Input
         label="Patente"
-        value={formData.patente}
+        value={formData.plate}
         onChangeText={handlePlateChange}
         placeholder="ABCD12"
         maxLength={6}
@@ -84,7 +85,7 @@ export default function RawPublishScreen() {
         label="Modelo"
         value={formData.model}
         onChangeText={(text) => updateFormData('model', text)}
-        placeholder="Yaris"
+        placeholder="Modelo del vehículo"
         editable={false}
       />
       <Input
@@ -141,7 +142,6 @@ export default function RawPublishScreen() {
           { label: 'Híbrido', value: 'Híbrido' },
           { label: 'Eléctrico', value: 'Eléctrico' },
         ]}
-        placeholder="Selecciona combustible"
       />
       <Select
         label="Transmisión"
@@ -151,7 +151,6 @@ export default function RawPublishScreen() {
           { label: 'Automática', value: 'Automática' },
           { label: 'Manual', value: 'Manual' },
         ]}
-        placeholder="Selecciona transmisión"
       />
       <Select
         label="Tipo de Vehículo"
@@ -164,7 +163,6 @@ export default function RawPublishScreen() {
           { label: 'Furgón', value: 'Furgón' },
           { label: 'Moto', value: 'Moto' },
         ]}
-        placeholder="Selecciona tipo"
       />
       <Select
         label="Carrocería"
@@ -177,7 +175,6 @@ export default function RawPublishScreen() {
           { label: 'Camioneta', value: 'Camioneta' },
           { label: 'Coupé', value: 'Coupé' },
         ]}
-        placeholder="Selecciona carrocería"
       />
       <Select
         label="Número de Puertas"
@@ -189,7 +186,6 @@ export default function RawPublishScreen() {
           { label: '4', value: '4' },
           { label: '5', value: '5' },
         ]}
-        placeholder="Selecciona puertas"
       />
       <Input
         label="VIN"
@@ -274,12 +270,58 @@ export default function RawPublishScreen() {
       <Text style={styles.sectionTitle}>Fotos</Text>
       <Text style={styles.subtitle}>Sube al menos 1 foto de tu vehículo.</Text>
       <ImageUploader
-        onImagesChange={(images) => updateFormData('images', images)}
+        images={selectedImages}
+        onAddImage={handleImagePick}
+        onRemoveImage={handleRemoveImage}
         maxImages={10}
-        folder="vehicles"
-        hideUploadButton={true}
-        images={formData.images}
       />
+    </View>
+  );
+
+  const renderStep6 = () => (
+    <View>
+      <Text style={styles.sectionTitle}>Agendar Inspección y Pago</Text>
+      <Text style={styles.subtitle}>Elige dónde y cuándo quieres inspeccionar tu auto.</Text>
+      
+      <Select
+        label="Ubicación AutoBox"
+        value={formData.inspectionLocation}
+        onChange={(value) => updateFormData('inspectionLocation', value)}
+        options={autoBoxLocations.map(l => ({ label: l.name, value: l.id }))}
+        placeholder="Selecciona ubicación"
+      />
+
+      <DatePicker
+        label="Fecha"
+        value={formData.inspectionDate}
+        onChange={(date) => updateFormData('inspectionDate', date)}
+        minimumDate={new Date()}
+      />
+
+      <Select
+        label="Horario"
+        value={formData.inspectionTime}
+        onChange={(value) => updateFormData('inspectionTime', value)}
+        options={availableTimeSlots.map(t => ({ label: t, value: t }))}
+        disabled={loadingSlots || availableTimeSlots.length === 0}
+        placeholder={loadingSlots ? "Cargando horarios..." : "Selecciona horario"}
+      />
+
+      <View style={styles.summaryContainer}>
+        <Text style={styles.summaryTitle}>Resumen de Pago</Text>
+        <View style={styles.summaryRow}>
+          <Text>Publicación</Text>
+          <Text>${publicationPrice.toLocaleString()}</Text>
+        </View>
+        <View style={styles.summaryRow}>
+          <Text>Inspección</Text>
+          <Text>${inspectionPrice.toLocaleString()}</Text>
+        </View>
+        <View style={[styles.summaryRow, styles.totalRow]}>
+          <Text style={styles.totalText}>Total</Text>
+          <Text style={styles.totalText}>${(publicationPrice + inspectionPrice).toLocaleString()}</Text>
+        </View>
+      </View>
     </View>
   );
 
@@ -291,16 +333,12 @@ export default function RawPublishScreen() {
       >
         <View style={styles.header}>
           <View style={styles.headerLeft}>
-            <TouchableOpacity onPress={() => router.navigate('/(tabs)/publish')} style={styles.backButtonHeader}>
+            <TouchableOpacity onPress={() => router.back()} style={styles.backButtonHeader}>
               <Ionicons name="arrow-back" size={24} color="#333" />
             </TouchableOpacity>
             <Text style={styles.headerTitle}>Publicar Vehículo</Text>
           </View>
           <Text style={styles.stepIndicator}>Paso {currentStep} de {totalSteps}</Text>
-        </View>
-
-        <View style={styles.progressBar}>
-          <View style={[styles.progressFill, { width: `${(currentStep / totalSteps) * 100}%` }]} />
         </View>
 
         <ScrollView contentContainerStyle={styles.content}>
@@ -309,24 +347,26 @@ export default function RawPublishScreen() {
           {currentStep === 3 && renderStep3()}
           {currentStep === 4 && renderStep4()}
           {currentStep === 5 && renderStep5()}
-        </ScrollView>
+          {currentStep === 6 && renderStep6()}
 
-        <View style={styles.footer}>
-          {currentStep > 1 && (
+          <View style={styles.navigationButtons}>
+            {currentStep > 1 && (
+              <Button
+                variant="outline"
+                title="Anterior"
+                onPress={handleBack}
+                style={styles.navButton}
+              />
+            )}
             <Button
-              title="Atrás"
-              variant="outline"
-              onPress={prevStep}
-              style={styles.backButton}
+              title={currentStep === totalSteps ? (isEditMode ? "Guardar y Pagar" : "Pagar") : "Siguiente"}
+              onPress={currentStep === totalSteps ? handleSubmit : handleNext}
+              style={styles.navButton}
+              loading={loading}
+              disabled={(currentStep === 1 && !plateValid) || (currentStep === 6 && (!formData.inspectionLocation || !formData.inspectionDate || !formData.inspectionTime))}
             />
-          )}
-          <Button
-            title={currentStep === totalSteps ? "Pagar y Publicar" : "Siguiente"}
-            onPress={currentStep === totalSteps ? publish : nextStep}
-            loading={loading}
-            style={styles.nextButton}
-          />
-        </View>
+          </View>
+        </ScrollView>
       </KeyboardAvoidingView>
     </Screen>
   );
@@ -335,17 +375,12 @@ export default function RawPublishScreen() {
 const styles = StyleSheet.create({
   header: {
     padding: 16,
-    backgroundColor: '#FFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#EEE',
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
   },
   headerLeft: {
     flexDirection: 'row',
@@ -354,17 +389,13 @@ const styles = StyleSheet.create({
   backButtonHeader: {
     marginRight: 12,
   },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
   stepIndicator: {
     fontSize: 14,
     color: '#666',
-  },
-  progressBar: {
-    height: 4,
-    backgroundColor: '#E0E0E0',
-  },
-  progressFill: {
-    height: '100%',
-    backgroundColor: '#4CAF50',
   },
   content: {
     padding: 16,
@@ -372,68 +403,75 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 20,
     fontWeight: 'bold',
+    marginBottom: 8,
     color: '#333',
-    marginBottom: 16,
   },
   subtitle: {
     fontSize: 14,
     color: '#666',
-    marginBottom: 16,
-  },
-  footer: {
-    padding: 16,
-    backgroundColor: '#FFF',
-    borderTopWidth: 1,
-    borderTopColor: '#EEE',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  backButton: {
-    flex: 1,
-    marginRight: 8,
-  },
-  nextButton: {
-    flex: 2,
-    marginLeft: 8,
+    marginBottom: 20,
   },
   successText: {
     color: '#4CAF50',
-    fontSize: 14,
     marginTop: 8,
-    fontWeight: '600',
+    marginLeft: 4,
   },
   warningText: {
     color: '#FF9800',
-    fontSize: 14,
     marginTop: 8,
-    fontWeight: '600',
+    marginLeft: 4,
+  },
+  navigationButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 24,
+    gap: 12,
+  },
+  navButton: {
+    flex: 1,
   },
   priceSection: {
-    backgroundColor: '#FFFFFF',
-    padding: 24,
-    borderRadius: 16,
-    marginBottom: 24,
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
+    backgroundColor: 'white',
+    padding: 20,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginTop: 10,
   },
   priceLabel: {
     fontSize: 16,
-    fontWeight: '600',
     color: '#666',
-    marginBottom: 16,
-    textAlign: 'center',
-    letterSpacing: 0.3,
+    marginBottom: 10,
   },
   priceInput: {
-    fontSize: 32,
-    fontWeight: '700',
+    fontSize: 24,
+    fontWeight: 'bold',
     textAlign: 'center',
-    color: '#2E7D32',
-    letterSpacing: 1,
+    color: '#4CAF50',
+  },
+  summaryContainer: {
+    backgroundColor: '#fff',
+    padding: 16,
+    borderRadius: 12,
+    marginTop: 20,
+  },
+  summaryTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 12,
+  },
+  summaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  totalRow: {
+    marginTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#eee',
+    paddingTop: 8,
+  },
+  totalText: {
+    fontWeight: 'bold',
+    fontSize: 16,
   },
 });

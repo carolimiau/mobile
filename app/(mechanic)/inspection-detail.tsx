@@ -235,7 +235,7 @@ export default function InspectionDetailScreen() {
               style={styles.actionButton}
             />
             <Button
-              title="Rechazar Inspección"
+              title="Cancelar Inspección"
               onPress={() => setShowRejectModal(true)}
               variant="outline"
               style={[styles.actionButton, { borderColor: '#F44336' }]}
@@ -406,8 +406,8 @@ export default function InspectionDetailScreen() {
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Rechazar Inspección</Text>
-            <Text style={styles.modalSubtitle}>Por favor indique el motivo del rechazo:</Text>
+            <Text style={styles.modalTitle}>Cancelar Inspección</Text>
+            <Text style={styles.modalSubtitle}>Por favor indique el motivo de la cancelación:</Text>
             
             <TextInput
               style={styles.commentInput}
@@ -420,7 +420,7 @@ export default function InspectionDetailScreen() {
 
             <View style={{ flexDirection: 'row', gap: 10, marginTop: 20 }}>
               <Button
-                title="Cancelar"
+                title="Volver"
                 onPress={() => {
                   setShowRejectModal(false);
                   setCancellationReason('');
@@ -429,7 +429,7 @@ export default function InspectionDetailScreen() {
                 style={{ flex: 1 }}
               />
               <Button
-                title="Confirmar Rechazo"
+                title="Confirmar"
                 onPress={handleRejectInspection}
                 style={{ flex: 1, backgroundColor: '#F44336' }}
               />

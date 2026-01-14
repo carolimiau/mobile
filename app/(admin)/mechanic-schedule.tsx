@@ -21,6 +21,7 @@ const DAYS = [
   { id: 4, name: 'Jueves' },
   { id: 5, name: 'Viernes' },
   { id: 6, name: 'Sábado' },
+  { id: 7, name: 'Domingo' },
 ];
 
 export default function AdminMechanicScheduleScreen() {

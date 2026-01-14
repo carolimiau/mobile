@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -23,14 +23,34 @@ export default function PaymentsScreen() {
     refreshing,
     selectedFilter,
     setSelectedFilter,
-    totalAmount,
     startDate,
     setStartDate,
     endDate,
     setEndDate,
-    onRefresh,
+    onRefresh: originalOnRefresh,
     updatePaymentStatus,
   } = usePayments();
+
+  // Local state for financial summary
+  const [financialSummary, setFinancialSummary] = useState({ 
+    totalConfirmed: 0, 
+    totalUserBalance: 0, 
+    totalMechanicWithdrawals: 0 
+  });
+
+  useEffect(() => {
+     loadFinancialSummary();
+  }, [refreshing]);
+
+  const loadFinancialSummary = async () => {
+     const summary = await paymentService.getFinancialSummary();
+     setFinancialSummary(summary);
+  };
+
+  const onRefresh = async () => {
+    await originalOnRefresh();
+    await loadFinancialSummary();
+  };
 
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [showPicker, setShowPicker] = useState(false);
@@ -85,6 +105,7 @@ export default function PaymentsScreen() {
 
   const renderPaymentItem = ({ item }: { item: any }) => {
     const isExpanded = expandedId === item.id;
+    const isWithdrawal = item.tipo === 'RETIRO' || item.metodo === 'Retiro';
     const statusColor = paymentService.getStatusColor(item.estado);
 
     return (
@@ -95,11 +116,11 @@ export default function PaymentsScreen() {
           activeOpacity={0.7}
         >
           <View style={styles.paymentInfo}>
-            <Text style={styles.paymentAmount}>
-              {paymentService.formatCurrency(item.monto)}
+            <Text style={[styles.paymentAmount, isWithdrawal && { color: '#F44336' }]}>
+              {isWithdrawal ? '- ' : ''}{paymentService.formatCurrency(item.monto)}
             </Text>
             <Text style={styles.paymentMeta}>
-              {item.usuario?.primerNombre} {item.usuario?.primerApellido}
+              {isWithdrawal ? 'Mecánico: ' : ''}{item.usuario?.primerNombre} {item.usuario?.primerApellido}
             </Text>
             <Text style={styles.paymentDate}>
               {new Date(item.fechaCreacion).toLocaleDateString('es-CL')}
@@ -210,18 +231,22 @@ export default function PaymentsScreen() {
           <View style={styles.summaryItem}>
             <Text style={styles.summaryLabel}>Total Confirmado</Text>
             <Text style={styles.summaryAmount}>
-              {paymentService.formatCurrency(totalAmount)}
+              {paymentService.formatCurrency(financialSummary.totalConfirmed)}
             </Text>
-            {(startDate || endDate) && (
-              <Text style={styles.summarySubtext}>
-                (En periodo seleccionado)
-              </Text>
-            )}
           </View>
           <View style={styles.summaryDivider} />
           <View style={styles.summaryItem}>
-            <Text style={styles.summaryLabel}>Total Pagos</Text>
-            <Text style={styles.summaryAmount}>{payments.length}</Text>
+            <Text style={styles.summaryLabel}>Retiros Mec.</Text>
+            <Text style={[styles.summaryAmount, { color: '#F44336' }]}>
+              {paymentService.formatCurrency(financialSummary.totalMechanicWithdrawals)}
+            </Text>
+          </View>
+          <View style={styles.summaryDivider} />
+          <View style={styles.summaryItem}>
+            <Text style={styles.summaryLabel}>Saldo Usuarios</Text>
+            <Text style={styles.summaryAmount}>
+              {paymentService.formatCurrency(financialSummary.totalUserBalance)}
+            </Text>
           </View>
         </View>
 

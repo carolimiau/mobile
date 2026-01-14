@@ -393,7 +393,7 @@ export function usePublishWithInspection() {
 
       // For now, let's assume we navigate to payment
       router.push({
-        pathname: '/payment-gateway',
+        pathname: '/(tabs)/publish/payment-gateway',
         params: {
           amount: (inspectionPrice + publicationPrice).toString(),
           description: 'Inspección + Publicación Premium',

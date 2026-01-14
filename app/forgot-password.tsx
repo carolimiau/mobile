@@ -67,10 +67,14 @@ export default function ForgotPasswordScreen() {
         setLoading(true);
         setEmailError('');
         const res = await authService.forgotPassword(email);
-        Alert.alert('Código enviado', 'Revisa tu correo electrónico para obtener el código de recuperación.');
-        if (res.debug_token) {
+        
+        console.log('Forgot password result:', res);
+
+        if (res?.debug_token) {
            console.log('DEBUG TOKEN:', res.debug_token);
-           // Alert.alert('DEBUG TOKEN', res.debug_token); // Optional: for testing on device
+           Alert.alert('Código de Recuperación', `Tu código es: ${res.debug_token}`); 
+        } else {
+           Alert.alert('Código enviado', 'Revisa tu correo electrónico para obtener el código de recuperación.');
         }
         setStep(2);
     } catch (error: any) {

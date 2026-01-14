@@ -6,7 +6,7 @@ import { Card } from './ui/Card';
 
 interface InspectionCardProps {
   inspection: Inspection;
-  onPress: () => void;
+  onPress?: () => void;
 }
 
 export const InspectionCard: React.FC<InspectionCardProps> = ({ inspection, onPress }) => {

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, Image } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -15,6 +15,41 @@ export default function ChatDetailScreen() {
   const { messages, loading, sending, sendMessage } = useChatMessages(chatId);
   const [inputText, setInputText] = useState('');
 
+  const formatMessageDate = (dateString: string) => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+
+    if (date.toDateString() === now.toDateString()) {
+      return 'Hoy';
+    } else if (date.toDateString() === yesterday.toDateString()) {
+      return 'Ayer';
+    }
+    return date.toLocaleDateString('es-CL', { weekday: 'long', day: 'numeric', month: 'long' });
+  };
+
+  const processedMessages = useMemo(() => {
+    const items = [];
+    for (let i = 0; i < messages.length; i++) {
+        const msg = messages[i];
+        items.push({ ...msg, type: 'message' });
+
+        const nextMsg = messages[i + 1];
+        const currentDate = new Date(msg.createdAt).toDateString();
+        const nextDate = nextMsg ? new Date(nextMsg.createdAt).toDateString() : null;
+
+        if (currentDate !== nextDate) {
+            items.push({
+            id: `date-${currentDate}`,
+            type: 'date',
+            date: msg.createdAt
+            });
+        }
+    }
+    return items;
+  }, [messages]);
+
   const handleSend = () => {
     if (inputText.trim()) {
       sendMessage(inputText);
@@ -23,6 +58,14 @@ export default function ChatDetailScreen() {
   };
 
   const renderMessage = ({ item }: { item: any }) => {
+    if (item.type === 'date') {
+      return (
+        <View style={styles.dateSeparator}>
+          <Text style={styles.dateSeparatorText}>{formatMessageDate(item.date)}</Text>
+        </View>
+      );
+    }
+
     const isMe = item.isMe; 
     return (
       <View style={[styles.messageContainer, isMe ? styles.myMessage : styles.otherMessage]}>
@@ -58,7 +101,7 @@ export default function ChatDetailScreen() {
       </View>
 
       <FlatList
-        data={messages}
+        data={processedMessages}
         keyExtractor={(item) => item.id.toString()}
         renderItem={renderMessage}
         contentContainerStyle={styles.messagesList}
@@ -170,6 +213,19 @@ const styles = StyleSheet.create({
   },
   otherMessageTime: {
     color: '#999',
+  },
+  dateSeparator: {
+    alignItems: 'center',
+    marginVertical: 16,
+  },
+  dateSeparatorText: {
+    fontSize: 12,
+    color: '#888',
+    backgroundColor: '#E0E0E0',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 10,
+    overflow: 'hidden',
   },
   inputContainer: {
     flexDirection: 'row',

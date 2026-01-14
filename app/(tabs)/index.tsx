@@ -26,34 +26,55 @@ const { width } = Dimensions.get('window');
 
 // --- Components ---
 
-const HomeHeader = ({ user, balance }: { user: any, balance: number }) => (
-  <View style={styles.headerContainer}>
-    <View style={styles.userInfo}>
-      <View style={styles.avatarContainer}>
-        {user?.foto_url ? (
-          <Image source={{ uri: getImageUrl(user.foto_url) }} style={styles.avatar} />
-        ) : (
-          <View style={[styles.avatar, styles.avatarPlaceholder]}>
-            <Text style={styles.avatarInitials}>
-              {user?.primerNombre?.[0] || user?.email?.[0] || '?'}
-            </Text>
-          </View>
-        )}
-      </View>
-      <View style={styles.greetingContainer}>
-        <Text style={styles.greetingText}>Hola,</Text>
-        <Text style={styles.userName}>{user?.primerNombre || 'Usuario'}</Text>
-      </View>
+const HomeHeader = ({ user, balance }: { user: any, balance: number }) => {
+  const router = useRouter();
+  const [showBalance, setShowBalance] = useState(true);
+
+  return (
+    <View style={styles.headerContainer}>
+      <TouchableOpacity 
+        style={styles.userInfo} 
+        onPress={() => router.push('/profile')}
+        activeOpacity={0.7}
+      >
+        <View style={styles.avatarContainer}>
+          {user?.foto_url ? (
+            <Image source={{ uri: getImageUrl(user.foto_url) }} style={styles.avatar} />
+          ) : (
+            <View style={[styles.avatar, styles.avatarPlaceholder]}>
+              <Text style={styles.avatarInitials}>
+                {user?.primerNombre?.[0] || user?.email?.[0] || '?'}
+              </Text>
+            </View>
+          )}
+        </View>
+        <View style={styles.greetingContainer}>
+          <Text style={styles.greetingText}>Hola,</Text>
+          <Text style={styles.userName}>{user?.primerNombre || 'Usuario'}</Text>
+        </View>
+      </TouchableOpacity>
+      
+      <TouchableOpacity 
+        style={styles.balanceContainer}
+        onPress={() => setShowBalance(!showBalance)}
+        activeOpacity={0.7}
+      >
+        <Text style={styles.balanceLabel}>Saldo AutoBox</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end' }}>
+          <Text style={styles.balanceAmount}>
+            {showBalance ? `$${balance.toLocaleString('es-CL')}` : '••••••••'}
+          </Text>
+          <Ionicons 
+            name={showBalance ? "eye-outline" : "eye-off-outline"} 
+            size={14} 
+            color="#2E7D32" 
+            style={{ marginLeft: 4 }}
+          />
+        </View>
+      </TouchableOpacity>
     </View>
-    
-    <View style={styles.balanceContainer}>
-      <Text style={styles.balanceLabel}>Saldo AutoBox</Text>
-      <Text style={styles.balanceAmount}>
-        ${balance.toLocaleString('es-CL')}
-      </Text>
-    </View>
-  </View>
-);
+  );
+};
 
 const TabSelector = ({ activeTab, onTabChange }: { activeTab: string, onTabChange: (tab: string) => void }) => {
   const tabs = [

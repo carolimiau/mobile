@@ -17,12 +17,55 @@ export function useProfile() {
     telefono: '',
     rut: '',
     foto_url: '',
+    password: '',
+    confirmPassword: '',
   });
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  
+  // Password Validation
+  const [passwordErrors, setPasswordErrors] = useState({
+    length: false,
+    uppercase: false,
+    lowercase: false,
+    number: false,
+    special: false,
+  });
+  const [showPasswordErrors, setShowPasswordErrors] = useState(false);
+  const [emailError, setEmailError] = useState('');
 
   useEffect(() => {
     loadProfile();
   }, []);
+
+  // Email Validation
+  useEffect(() => {
+    if (formData.email) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(formData.email)) {
+        setEmailError('Correo electrónico inválido');
+      } else {
+        setEmailError('');
+      }
+    } else {
+      setEmailError('');
+    }
+  }, [formData.email]);
+
+  // Password Validation Effect
+  useEffect(() => {
+    if (formData.password) {
+      setPasswordErrors({
+        length: formData.password.length >= 8,
+        uppercase: /[A-Z]/.test(formData.password),
+        lowercase: /[a-z]/.test(formData.password),
+        number: /\d/.test(formData.password),
+        special: /[!@#$%^&*(),.?":{}|<>]/.test(formData.password),
+      });
+      setShowPasswordErrors(true);
+    } else {
+      setShowPasswordErrors(false);
+    }
+  }, [formData.password]);
 
   const loadProfile = async () => {
     try {
@@ -37,6 +80,8 @@ export function useProfile() {
           telefono: userData.telefono ? userData.telefono.toString() : '',
           rut: userData.rut || '',
           foto_url: userData.foto_url || '',
+          password: '',
+          confirmPassword: '',
         });
       }
     } catch (error) {
@@ -57,11 +102,38 @@ export function useProfile() {
         throw new Error('No se encontró el usuario autenticado');
       }
 
-      const payload = {
+      // Validar contraseñas si se ingresaron
+      if (formData.password || formData.confirmPassword) {
+        if (formData.password !== formData.confirmPassword) {
+            Alert.alert('Error', 'Las contraseñas no coinciden');
+            setSaving(false);
+            return;
+        }
+
+        const isPasswordValid = Object.values(passwordErrors).every(Boolean);
+        if (!isPasswordValid) {
+            Alert.alert('Error', 'La contraseña no cumple con los requisitos de seguridad');
+            setSaving(false);
+            return;
+        }
+      }
+
+      if (emailError) {
+        Alert.alert('Error', 'Por favor corrige el email antes de guardar');
+        setSaving(false);
+        return;
+      }
+
+      const payload: any = {
         primerNombre: formData.primerNombre,
         primerApellido: formData.primerApellido,
         telefono: formData.telefono,
-      } as Partial<User>;
+        email: formData.email,
+      };
+
+      if (formData.password) {
+        payload.password = formData.password;
+      }
 
       const updatedUser = await authService.updateProfileData(user.id, payload);
       setUser(updatedUser);
@@ -73,6 +145,8 @@ export function useProfile() {
         email: updatedUser.email || prev.email,
         rut: updatedUser.rut || prev.rut,
         foto_url: updatedUser.foto_url || prev.foto_url,
+        password: '',
+        confirmPassword: '',
       }));
       setIsEditing(false);
       Alert.alert('Éxito', 'Perfil actualizado correctamente');
@@ -115,5 +189,8 @@ export function useProfile() {
     handleSave,
     handleAvatarChange,
     uploadingAvatar,
+    passwordErrors,
+    showPasswordErrors,
+    emailError,
   };
 }

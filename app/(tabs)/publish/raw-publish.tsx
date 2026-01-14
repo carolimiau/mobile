@@ -1,16 +1,24 @@
 import React from 'react';
-import { View, Text, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator, TouchableOpacity } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  KeyboardAvoidingView,
+  Platform,
+  ActivityIndicator,
+  TouchableOpacity,
+} from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { Screen } from '../../components/ui/Screen';
-import { Button } from '../../components/ui/Button';
-import { Input } from '../../components/ui/Input';
-import { Select } from '../../components/ui/Select';
-import { DatePicker } from '../../components/ui/DatePicker';
-import { ImageUploader } from '../../components/ui/ImageUploader';
-import { usePublishWithInspection } from '../../hooks/usePublishWithInspection';
+import { Screen } from '../../../components/ui/Screen';
+import { Input } from '../../../components/ui/Input';
+import { Button } from '../../../components/ui/Button';
+import { Select } from '../../../components/ui/Select';
+import { ImageUploader } from '../../../components/ui/ImageUploader';
+import { useRawPublish } from '../../../hooks/useRawPublish';
 
-export default function PublishWithInspectionScreen() {
+export default function RawPublishScreen() {
   const router = useRouter();
   const {
     currentStep,
@@ -19,24 +27,15 @@ export default function PublishWithInspectionScreen() {
     handlePlateChange,
     loadingPlateData,
     plateValid,
+    nextStep,
+    prevStep,
+    handleImagesUploaded,
+    publish,
     loading,
-    loadingModels,
-    loadingSlots,
-    availableModels,
-    availableTimeSlots,
-    selectedImages,
-    handleImagePick,
-    handleRemoveImage,
-    handleNext,
-    handleBack,
-    handleSubmit,
-    inspectionPrice,
-    publicationPrice,
-    autoBoxLocations,
-    isEditMode
-  } = usePublishWithInspection();
+    isEditMode,
+  } = useRawPublish();
 
-  const totalSteps = 6;
+  const totalSteps = 5;
 
   const renderStep1 = () => (
     <View>
@@ -46,7 +45,7 @@ export default function PublishWithInspectionScreen() {
       </Text>
       <Input
         label="Patente"
-        value={formData.plate}
+        value={formData.patente}
         onChangeText={handlePlateChange}
         placeholder="ABCD12"
         maxLength={6}
@@ -85,7 +84,7 @@ export default function PublishWithInspectionScreen() {
         label="Modelo"
         value={formData.model}
         onChangeText={(text) => updateFormData('model', text)}
-        placeholder="Modelo del vehículo"
+        placeholder="Yaris"
         editable={false}
       />
       <Input
@@ -142,6 +141,7 @@ export default function PublishWithInspectionScreen() {
           { label: 'Híbrido', value: 'Híbrido' },
           { label: 'Eléctrico', value: 'Eléctrico' },
         ]}
+        placeholder="Selecciona combustible"
       />
       <Select
         label="Transmisión"
@@ -151,6 +151,7 @@ export default function PublishWithInspectionScreen() {
           { label: 'Automática', value: 'Automática' },
           { label: 'Manual', value: 'Manual' },
         ]}
+        placeholder="Selecciona transmisión"
       />
       <Select
         label="Tipo de Vehículo"
@@ -163,6 +164,7 @@ export default function PublishWithInspectionScreen() {
           { label: 'Furgón', value: 'Furgón' },
           { label: 'Moto', value: 'Moto' },
         ]}
+        placeholder="Selecciona tipo"
       />
       <Select
         label="Carrocería"
@@ -175,6 +177,7 @@ export default function PublishWithInspectionScreen() {
           { label: 'Camioneta', value: 'Camioneta' },
           { label: 'Coupé', value: 'Coupé' },
         ]}
+        placeholder="Selecciona carrocería"
       />
       <Select
         label="Número de Puertas"
@@ -186,6 +189,7 @@ export default function PublishWithInspectionScreen() {
           { label: '4', value: '4' },
           { label: '5', value: '5' },
         ]}
+        placeholder="Selecciona puertas"
       />
       <Input
         label="VIN"
@@ -270,68 +274,12 @@ export default function PublishWithInspectionScreen() {
       <Text style={styles.sectionTitle}>Fotos</Text>
       <Text style={styles.subtitle}>Sube al menos 1 foto de tu vehículo.</Text>
       <ImageUploader
-        images={selectedImages}
-        onAddImage={handleImagePick}
-        onRemoveImage={handleRemoveImage}
+        onImagesChange={(images) => updateFormData('images', images)}
         maxImages={10}
+        folder="vehicles"
+        hideUploadButton={true}
+        images={formData.images}
       />
-    </View>
-  );
-
-  const renderStep6 = () => (
-    <View>
-      <Text style={styles.sectionTitle}>Agendar Inspección y Pago</Text>
-      <Text style={styles.subtitle}>Elige dónde y cuándo quieres inspeccionar tu auto.</Text>
-      
-      <Select
-        label="Ubicación AutoBox"
-        value={formData.inspectionLocation}
-        onChange={(value) => updateFormData('inspectionLocation', value)}
-        options={autoBoxLocations.map(l => ({ label: l.name, value: l.id }))}
-        placeholder="Selecciona ubicación"
-      />
-
-      <DatePicker
-        label="Fecha"
-        value={formData.inspectionDate}
-        onChange={(date) => updateFormData('inspectionDate', date)}
-        minimumDate={new Date()}
-      />
-
-      <Select
-        label="Hora"
-        value={formData.inspectionTime}
-        onChange={(value) => {
-            updateFormData('inspectionTime', value);
-            const slot = availableTimeSlots.find(s => s.time === value);
-            if (slot) updateFormData('horarioId', slot.id);
-        }}
-        options={availableTimeSlots.map(s => ({ label: s.time, value: s.time }))}
-        placeholder="Selecciona hora"
-        disabled={!formData.inspectionDate || !formData.inspectionLocation || loadingSlots}
-      />
-
-      <View style={{ height: 20 }} />
-
-      <Text style={styles.sectionTitle}>Resumen de Costos</Text>
-      <View style={styles.summaryCard}>
-        <View style={styles.summaryRow}>
-          <Text style={styles.summaryLabel}>Inspección Mecánica</Text>
-          <Text style={styles.summaryValue}>${inspectionPrice.toLocaleString('es-CL')}</Text>
-        </View>
-        <View style={styles.summaryRow}>
-          <Text style={styles.summaryLabel}>Publicación Premium</Text>
-          <Text style={styles.summaryValue}>${publicationPrice.toLocaleString('es-CL')}</Text>
-        </View>
-        <View style={[styles.summaryRow, styles.totalRow]}>
-          <Text style={styles.totalLabel}>Total a Pagar</Text>
-          <Text style={styles.totalValue}>${(inspectionPrice + publicationPrice).toLocaleString('es-CL')}</Text>
-        </View>
-      </View>
-      
-      <Text style={styles.infoText}>
-        Al continuar, serás redirigido a la pasarela de pago para completar tu solicitud.
-      </Text>
     </View>
   );
 
@@ -343,18 +291,12 @@ export default function PublishWithInspectionScreen() {
       >
         <View style={styles.header}>
           <View style={styles.headerLeft}>
-            <TouchableOpacity onPress={() => router.navigate('/(tabs)/publish')} style={styles.backButtonHeader}>
+            <TouchableOpacity onPress={() => router.back()} style={styles.backButtonHeader}>
               <Ionicons name="arrow-back" size={24} color="#333" />
             </TouchableOpacity>
-            <Text style={styles.headerTitle}>
-              {isEditMode ? 'Editar Publicación' : 'Vender con Inspección'}
-            </Text>
+            <Text style={styles.headerTitle}>Publicar Vehículo</Text>
           </View>
           <Text style={styles.stepIndicator}>Paso {currentStep} de {totalSteps}</Text>
-        </View>
-
-        <View style={styles.progressBar}>
-          <View style={[styles.progressFill, { width: `${(currentStep / totalSteps) * 100}%` }]} />
         </View>
 
         <ScrollView contentContainerStyle={styles.content}>
@@ -363,25 +305,34 @@ export default function PublishWithInspectionScreen() {
           {currentStep === 3 && renderStep3()}
           {currentStep === 4 && renderStep4()}
           {currentStep === 5 && renderStep5()}
-          {currentStep === 6 && renderStep6()}
-        </ScrollView>
 
-        <View style={styles.footer}>
-          {currentStep > 1 && (
-            <Button
-              title="Atrás"
-              variant="outline"
-              onPress={handleBack}
-              style={styles.backButton}
-            />
-          )}
-          <Button
-            title={currentStep === totalSteps ? "Pagar y Publicar" : "Siguiente"}
-            onPress={currentStep === totalSteps ? handleSubmit : handleNext}
-            loading={loading}
-            style={styles.nextButton}
-          />
-        </View>
+          <View style={styles.navigationButtons}>
+            {currentStep > 1 && (
+              <Button
+                variant="outline"
+                title="Anterior"
+                onPress={prevStep}
+                style={styles.navButton}
+              />
+            )}
+            {currentStep < 5 && (
+              <Button
+                title="Siguiente"
+                onPress={nextStep}
+                style={styles.navButton}
+                disabled={currentStep === 1 && !plateValid}
+              />
+            )}
+            {currentStep === 5 && (
+              <Button
+                title={isEditMode ? "Guardar Cambios" : "Publicar"}
+                onPress={publish}
+                loading={loading}
+                style={styles.navButton}
+              />
+            )}
+          </View>
+        </ScrollView>
       </KeyboardAvoidingView>
     </Screen>
   );
@@ -390,17 +341,12 @@ export default function PublishWithInspectionScreen() {
 const styles = StyleSheet.create({
   header: {
     padding: 16,
-    backgroundColor: '#FFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#EEE',
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
   },
   headerLeft: {
     flexDirection: 'row',
@@ -409,17 +355,13 @@ const styles = StyleSheet.create({
   backButtonHeader: {
     marginRight: 12,
   },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
   stepIndicator: {
     fontSize: 14,
     color: '#666',
-  },
-  progressBar: {
-    height: 4,
-    backgroundColor: '#E0E0E0',
-  },
-  progressFill: {
-    height: '100%',
-    backgroundColor: '#4CAF50',
   },
   content: {
     padding: 16,
@@ -427,121 +369,49 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 20,
     fontWeight: 'bold',
+    marginBottom: 8,
     color: '#333',
-    marginBottom: 16,
   },
   subtitle: {
     fontSize: 14,
     color: '#666',
-    marginBottom: 16,
-  },
-  footer: {
-    padding: 16,
-    backgroundColor: '#FFF',
-    borderTopWidth: 1,
-    borderTopColor: '#EEE',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  backButton: {
-    flex: 1,
-    marginRight: 8,
-  },
-  nextButton: {
-    flex: 2,
-    marginLeft: 8,
-  },
-  summaryCard: {
-    backgroundColor: '#FFF',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  summaryTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 16,
-  },
-  summaryRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 12,
-  },
-  summaryLabel: {
-    fontSize: 16,
-    color: '#666',
-  },
-  summaryValue: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-  },
-  totalRow: {
-    marginTop: 8,
-    paddingTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#EEE',
-  },
-  totalLabel: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
-  },
-  totalValue: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#4CAF50',
-  },
-  infoText: {
-    fontSize: 14,
-    color: '#666',
-    textAlign: 'center',
-    marginTop: 16,
+    marginBottom: 20,
   },
   successText: {
     color: '#4CAF50',
-    fontSize: 14,
     marginTop: 8,
-    fontWeight: '600',
+    marginLeft: 4,
   },
   warningText: {
     color: '#FF9800',
-    fontSize: 14,
     marginTop: 8,
-    fontWeight: '600',
+    marginLeft: 4,
+  },
+  navigationButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 24,
+    gap: 12,
+  },
+  navButton: {
+    flex: 1,
   },
   priceSection: {
-    backgroundColor: '#FFFFFF',
-    padding: 24,
-    borderRadius: 16,
-    marginBottom: 24,
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
+    backgroundColor: 'white',
+    padding: 20,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginTop: 10,
   },
   priceLabel: {
     fontSize: 16,
-    fontWeight: '600',
     color: '#666',
-    marginBottom: 16,
-    textAlign: 'center',
-    letterSpacing: 0.3,
+    marginBottom: 10,
   },
   priceInput: {
-    fontSize: 32,
-    fontWeight: '700',
+    fontSize: 24,
+    fontWeight: 'bold',
     textAlign: 'center',
-    color: '#2E7D32',
-    letterSpacing: 1,
+    color: '#4CAF50',
   },
 });

@@ -7,13 +7,90 @@ import {
   TouchableOpacity,
   View,
   Alert,
-  Platform
+  Platform,
+  ScrollView
 } from "react-native";
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import authService from '../../services/authService';
 import apiService from '../../services/apiService';
 import { useEffect, useState, useCallback } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
+import { BottomTabBarProps } from '@react-navigation/bottom-tabs';
+
+function AdminTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
+  const insets = useSafeAreaInsets();
+  
+  // List of routes that should not appear in the TabBar
+  const hiddenRoutes = [
+    'create-mechanic',
+    'mechanic-schedule',
+    'sede-schedule',
+    'mechanic-detail',
+    'mechanic-inspections',
+    'mechanic-payments',
+    'user-detail',
+  ];
+
+  return (
+    <View style={[styles.tabBarContainer, { paddingBottom: insets.bottom }]}>
+      <ScrollView 
+        horizontal 
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.tabBarContent}
+        style={styles.tabBarScroll}
+      >
+        {state.routes.map((route, index) => {
+          const { options } = descriptors[route.key];
+          
+          // Hide routes defined in hiddenRoutes or with href: null
+          if (hiddenRoutes.includes(route.name) || (options as any).href === null) return null;
+
+          const label =
+            options.tabBarLabel !== undefined
+              ? options.tabBarLabel
+              : options.title !== undefined
+              ? options.title
+              : route.name;
+
+          const isFocused = state.index === index;
+
+          const onPress = () => {
+            const event = navigation.emit({
+              type: 'tabPress',
+              target: route.key,
+              canPreventDefault: true,
+            });
+
+            if (!isFocused && !event.defaultPrevented) {
+              navigation.navigate(route.name);
+            }
+          };
+
+          const Icon = options.tabBarIcon;
+          const color = isFocused ? '#007bff' : '#8e8e93';
+
+          return (
+            <TouchableOpacity
+              key={route.key}
+              onPress={onPress}
+              style={[
+                styles.tabItem,
+                isFocused && styles.tabItemFocused
+              ]}
+            >
+              <View style={styles.iconContainer}>
+                 {Icon && Icon({ focused: isFocused, color, size: 24 })}
+              </View>
+              <Text style={[styles.tabLabel, { color }]}>
+                {typeof label === 'string' ? label : route.name}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </ScrollView>
+    </View>
+  );
+}
 
 export default function AdminLayout() {
   const router = useRouter();
@@ -67,7 +144,9 @@ export default function AdminLayout() {
     'mechanic-schedule', 
     'notifications', 
     'mechanic-detail', 
-    'mechanic-inspections'
+    'mechanic-inspections',
+    'mechanic-payments',
+    'user-detail'
   ];
   const shouldHideHeader = hideHeaderScreens.includes(currentSegment);
 
@@ -104,6 +183,7 @@ export default function AdminLayout() {
       )}
 
       <Tabs 
+        tabBar={props => <AdminTabBar {...props} />}
         screenOptions={{ 
           headerShown: false,
           tabBarActiveTintColor: '#007bff',
@@ -155,6 +235,15 @@ export default function AdminLayout() {
                   </View>
                 )}
               </View>
+            ),
+          }} 
+        />
+        <Tabs.Screen 
+          name="users" 
+          options={{
+            title: 'Usuarios',
+            tabBarIcon: ({ color, size }) => (
+              <Ionicons name="person" size={size} color={color} />
             ),
           }} 
         />
@@ -214,7 +303,14 @@ export default function AdminLayout() {
           }} 
         />
         <Tabs.Screen 
-          name="notifications" 
+          name="mechanic-payments" 
+          options={{ 
+            href: null,
+            tabBarStyle: { display: 'none' }
+          }} 
+        />
+        <Tabs.Screen 
+          name="notifications"  
           options={{
             title: 'Notificaciones',
             tabBarIcon: ({ color, size }) => (
@@ -291,5 +387,40 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 10,
     fontWeight: 'bold',
+  },
+  tabBarContainer: {
+    backgroundColor: '#FFFFFF',
+    borderTopWidth: 1,
+    borderTopColor: '#E0E0E0',
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  tabBarScroll: {
+    flexGrow: 0,
+  },
+  tabBarContent: {
+    paddingHorizontal: 8,
+  },
+  tabItem: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    minWidth: 80,
+    borderTopWidth: 3,
+    borderTopColor: 'transparent',
+  },
+  tabItemFocused: {
+    borderTopColor: '#007bff',
+  },
+  iconContainer: {
+    marginBottom: 4,
+  },
+  tabLabel: {
+    fontSize: 10,
+    fontWeight: '500',
   },
 });

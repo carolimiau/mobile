@@ -193,6 +193,34 @@ class AdminService {
     }
   }
 
+  // Users Management
+  async getUsers(): Promise<any[]> {
+    try {
+      return await apiService.fetch('/users', { requiresAuth: true });
+    } catch (error) {
+       console.error('Error fetching users:', error);
+       throw error;
+    }
+  }
+
+  async getUser(id: string): Promise<any> {
+    try {
+      return await apiService.fetch(`/users/${id}`, { requiresAuth: true });
+    } catch (error) {
+      console.error('Error fetching user:', error);
+      throw error;
+    }
+  }
+
+  async getUserInspections(id: string): Promise<any[]> {
+    try {
+      return await apiService.fetch(`/users/${id}/inspections`, { requiresAuth: true });
+    } catch (error) {
+      console.error('Error fetching user inspections:', error);
+      throw error;
+    }
+  }
+
   // Mecánicos
   async getAllMechanics(search?: string, date?: string, time?: string): Promise<Mechanic[]> {
     try {

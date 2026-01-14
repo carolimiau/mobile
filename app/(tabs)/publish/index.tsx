@@ -8,8 +8,8 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { Screen } from '../../components/ui/Screen';
-import { Card } from '../../components/ui/Card';
+import { Screen } from '../../../components/ui/Screen';
+import { Card } from '../../../components/ui/Card';
 
 export default function PublishScreen() {
   const router = useRouter();
@@ -23,7 +23,7 @@ export default function PublishScreen() {
       iconColor: '#4CAF50',
       backgroundColor: '#F1F8E9',
       borderColor: '#4CAF50',
-      route: '/publish-with-inspection'
+      route: '/(tabs)/publish/publish-with-inspection'
     },
     {
       id: 'own-publication',
@@ -33,7 +33,7 @@ export default function PublishScreen() {
       iconColor: '#2196F3',
       backgroundColor: '#E3F2FD',
       borderColor: '#2196F3',
-      route: '/raw-publish'
+      route: '/(tabs)/publish/raw-publish'
     }
   ];
 

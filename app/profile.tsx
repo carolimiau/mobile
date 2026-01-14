@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Screen } from '../components/ui/Screen';
 import { Button } from '../components/ui/Button';
@@ -20,8 +20,63 @@ export default function ProfileScreen() {
     updateFormData,
     handleSave,
     handleAvatarChange,
-    uploadingAvatar
+    uploadingAvatar,
+    passwordErrors,
+    showPasswordErrors,
+    emailError,
   } = useProfile();
+
+  const handleNameChange = (text: string, field: string) => {
+    // Solo permitir letras y espacios (incluyendo tildes y ñ)
+    if (/^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]*$/.test(text)) {
+      updateFormData(field, text);
+    }
+  };
+
+  const handlePhoneChange = (text: string) => {
+    let digits = text.replace(/\D/g, '');
+    
+    // Si borran el prefijo 569, lo restauramos
+    if (digits.length < 3) {
+        digits = '569';
+    }
+    
+    // Si pegan un número sin prefijo, agregamos 569
+    if (!digits.startsWith('569')) {
+        digits = '569' + digits;
+    }
+    
+    // Limitar a 11 dígitos (56 9 XXXX XXXX)
+    if (digits.length > 11) {
+        digits = digits.slice(0, 11);
+    }
+    
+    // Formatear: +56 9 XXXX XXXX
+    let formatted = '+56 9 ';
+    const rest = digits.slice(3);
+    
+    if (rest.length > 0) {
+        formatted += rest.slice(0, 4);
+        if (rest.length > 4) {
+            formatted += ' ' + rest.slice(4, 8);
+        }
+    }
+    
+    updateFormData('telefono', formatted);
+  };
+
+  const RequirementItem = ({ valid, text }: { valid: boolean; text: string }) => (
+    <View style={styles.requirementItem}>
+      <Ionicons 
+        name={valid ? "checkmark-circle" : "close-circle"} 
+        size={16} 
+        color={valid ? "#4CAF50" : "#F44336"} 
+      />
+      <Text style={[styles.requirementText, { color: valid ? "#4CAF50" : "#F44336" }]}>
+        {text}
+      </Text>
+    </View>
+  );
 
   if (loading) {
     return (
@@ -45,7 +100,11 @@ export default function ProfileScreen() {
         </TouchableOpacity>
       </View>
 
-      <ScrollView contentContainerStyle={styles.content}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        style={{ flex: 1 }}
+      >
+        <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.avatarContainer}>
           {user?.foto_url ? (
             <Image
@@ -88,14 +147,14 @@ export default function ProfileScreen() {
           <Input
             label="Nombre"
             value={formData.primerNombre}
-            onChangeText={(text) => updateFormData('primerNombre', text)}
+            onChangeText={(text) => handleNameChange(text, 'primerNombre')}
             editable={isEditing}
             placeholder="Tu nombre"
           />
           <Input
             label="Apellido"
             value={formData.primerApellido}
-            onChangeText={(text) => updateFormData('primerApellido', text)}
+            onChangeText={(text) => handleNameChange(text, 'primerApellido')}
             editable={isEditing}
             placeholder="Tu apellido"
           />
@@ -103,13 +162,16 @@ export default function ProfileScreen() {
             label="Email"
             value={formData.email}
             onChangeText={(text) => updateFormData('email', text)}
-            editable={false}
+            editable={isEditing}
             placeholder="tu@email.com"
+            error={emailError}
+            keyboardType="email-address"
+            autoCapitalize="none"
           />
           <Input
             label="Teléfono"
             value={formData.telefono}
-            onChangeText={(text) => updateFormData('telefono', text)}
+            onChangeText={handlePhoneChange}
             editable={isEditing}
             placeholder="+56 9 1234 5678"
             keyboardType="phone-pad"
@@ -123,6 +185,38 @@ export default function ProfileScreen() {
           />
 
           {isEditing && (
+            <View style={styles.passwordSection}>
+              <Text style={styles.passwordSectionTitle}>Cambiar Contraseña (Opcional)</Text>
+              <Input
+                label="Nueva Contraseña"
+                value={formData.password}
+                onChangeText={(text) => updateFormData('password', text)}
+                placeholder="••••••••"
+                secureTextEntry
+              />
+              
+              {showPasswordErrors && (
+                <View style={styles.passwordRequirements}>
+                  <Text style={styles.requirementsTitle}>La contraseña debe tener:</Text>
+                  <RequirementItem valid={passwordErrors.length} text="Mínimo 8 caracteres" />
+                  <RequirementItem valid={passwordErrors.uppercase} text="Una mayúscula" />
+                  <RequirementItem valid={passwordErrors.lowercase} text="Una minúscula" />
+                  <RequirementItem valid={passwordErrors.number} text="Un número" />
+                  <RequirementItem valid={passwordErrors.special} text="Un caracter especial (!@#$%...)" />
+                </View>
+              )}
+
+              <Input
+                label="Confirmar Nueva Contraseña"
+                value={formData.confirmPassword}
+                onChangeText={(text) => updateFormData('confirmPassword', text)}
+                placeholder="••••••••"
+                secureTextEntry
+              />
+            </View>
+          )}
+
+          {isEditing && (
             <Button
               title="Guardar Cambios"
               onPress={handleSave}
@@ -131,7 +225,8 @@ export default function ProfileScreen() {
             />
           )}
         </View>
-      </ScrollView>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </Screen>
   );
 }
@@ -241,5 +336,39 @@ const styles = StyleSheet.create({
   },
   saveButton: {
     marginTop: 16,
+  },
+  passwordSection: {
+    marginTop: 24,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#EEE',
+  },
+  passwordSectionTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 16,
+  },
+  passwordRequirements: {
+    marginTop: 8,
+    marginBottom: 16,
+    padding: 12,
+    backgroundColor: '#F5F5F5',
+    borderRadius: 8,
+  },
+  requirementsTitle: {
+    fontSize: 12,
+    fontWeight: 'bold',
+    color: '#666',
+    marginBottom: 8,
+  },
+  requirementItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  requirementText: {
+    fontSize: 12,
+    marginLeft: 6,
   },
 });

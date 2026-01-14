@@ -131,29 +131,6 @@ export default function AdminPublications() {
     );
   };
 
-  const handleDeletePublication = async (publicationId: string) => {
-    Alert.alert(
-      'Eliminar Publicación',
-      "Eliminar una publicación la bloqueará (no se mostrará públicamente). ¿Deseas continuar?",
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Eliminar',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await adminService.updatePublicationStatus(publicationId, 'blocked');
-              loadPublications(1, true);
-              Alert.alert('Éxito', 'Publicación bloqueada correctamente');
-            } catch (error: any) {
-              Alert.alert('Error', error.message || 'No se pudo bloquear la publicación');
-            }
-          }
-        }
-      ]
-    );
-  };
-
   const renderPublication = ({ item }: { item: Publication }) => {
     const statusColors = {
       active: '#4CAF50',
@@ -218,14 +195,6 @@ export default function AdminPublications() {
             <Text style={styles.actionButtonText}>
               {item.status === 'active' ? 'Desactivar' : item.status === 'blocked' ? 'Publicar' : 'Activar'}
             </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.actionButton, styles.deleteButton]}
-            onPress={() => handleDeletePublication(item.id)}
-          >
-            <Ionicons name="trash-outline" size={18} color="#FFF" />
-            <Text style={styles.actionButtonText}>Eliminar</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -303,7 +272,10 @@ export default function AdminPublications() {
   }
 
   return (
-    <Screen>
+    <Screen style={styles.container}>
+      <View style={styles.header}>
+        <Text style={styles.title}>Publicaciones</Text>
+      </View>
       <FlatList
         data={publications}
         keyExtractor={(item) => item.id}
@@ -328,6 +300,21 @@ export default function AdminPublications() {
 }
 
 const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#F5F5F5',
+  },
+  header: {
+    padding: 16,
+    backgroundColor: '#FFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#EEEEEE',
+  },
+  title: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#333',
+  },
   listContent: {
     padding: 16,
   },
@@ -472,9 +459,6 @@ const styles = StyleSheet.create({
   },
   toggleButton: {
     backgroundColor: '#2196F3',
-  },
-  deleteButton: {
-    backgroundColor: '#F44336',
   },
   actionButtonText: {
     color: '#FFF',

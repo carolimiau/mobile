@@ -45,13 +45,15 @@ export default function ChatListScreen() {
           </Text>
         </View>
         <View style={styles.messageRow}>
-          {item.unreadCount > 0 ? (
-            <View style={{ flex: 1 }} />
-          ) : (
-            <Text style={styles.lastMessage} numberOfLines={1}>
-              {lastMessageText}
-            </Text>
-          )}
+          <Text 
+            style={[
+              styles.lastMessage, 
+              item.unreadCount > 0 && styles.lastMessageBold
+            ]} 
+            numberOfLines={1}
+          >
+            {lastMessageText}
+          </Text>
           {item.unreadCount > 0 && (
             <View style={styles.badge}>
               <Text style={styles.badgeText}>{item.unreadCount}</Text>
