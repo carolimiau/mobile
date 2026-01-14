@@ -88,7 +88,63 @@ class AuthService {
     }
   }
 
+  async forgotPassword(email: string): Promise<{ message: string; debug_token?: string }> {
+    try {
+      const response = await fetch(`${API_URL}/auth/forgot-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      });
+      
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.message || 'Error al solicitar recuperación');
+      return result;
+    } catch (error) {
+       console.error('Error in forgotPassword:', error);
+       throw error;
+    }
+  }
+
+  async verifyToken(email: string, token: string): Promise<boolean> {
+    try {
+      const response = await fetch(`${API_URL}/auth/verify-token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, token }),
+      });
+      
+      if (!response.ok) {
+        const result = await response.json();
+        throw new Error(result.message || 'Token inválido');
+      }
+      return true;
+    } catch (error) {
+       console.error('Error in verifyToken:', error);
+       throw error;
+    }
+  }
+
+  async resetPassword(email: string, token: string, newPassword: string): Promise<boolean> {
+    try {
+      const response = await fetch(`${API_URL}/auth/reset-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, token, newPassword }),
+      });
+      
+      if (!response.ok) {
+        const result = await response.json();
+        throw new Error(result.message || 'Error al restablecer contraseña');
+      }
+      return true;
+    } catch (error) {
+       console.error('Error in resetPassword:', error);
+       throw error;
+    }
+  }
+
   async login(data: LoginData): Promise<AuthResponse> {
+
     try {
       // Add timeout to login request
       const timeout = new Promise((_, reject) => {

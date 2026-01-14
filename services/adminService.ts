@@ -17,7 +17,9 @@ export interface Mechanic {
   status: 'active' | 'inactive';
   rating?: number;
   completedInspections?: number;
+  assignedInspections?: number;
   pendingInspections?: number;
+  pendingInspectionsCount?: number;
   inspectionsCompleted?: number;
   certificateUrl?: string;
   createdAt: string;
@@ -84,6 +86,7 @@ export interface GlobalSettings {
   pricing: {
     inspectionPrice: number;
     publicationPrice: number;
+    mechanicBonus: number;
   };
 }
 
@@ -151,7 +154,8 @@ class AdminService {
         return {
           pricing: {
             inspectionPrice: 40000,
-            publicationPrice: 25000
+            publicationPrice: 25000,
+            mechanicBonus: 0.1
           }
         };
       }
@@ -162,7 +166,8 @@ class AdminService {
       return {
         pricing: {
           inspectionPrice: 25000,
-          publicationPrice: 5000
+          publicationPrice: 5000,
+          mechanicBonus: 0.1
         }
       };
     }
@@ -830,6 +835,37 @@ class AdminService {
       return await this.updatePublicationStatus(publicationId, 'blocked');
     } catch (error) {
       console.error('Error deletePublication (block):', error);
+      throw error;
+    }
+  }
+
+  async getMechanicDebt(mechanicId: string): Promise<any> {
+    try {
+      const headers = await this.getHeaders();
+      const response = await fetch(`${API_URL}/admin/mechanics/${mechanicId}/debt`, {
+        method: 'GET',
+        headers,
+      });
+      if (!response.ok) throw new Error('Error fetching debt');
+      return await response.json();
+    } catch (error) {
+      console.error('Error getMechanicDebt:', error);
+      throw error;
+    }
+  }
+
+  async registerPayment(mechanicId: string, amount: number, receiptUrl: string, inspectionIds: string[]): Promise<any> {
+    try {
+      const headers = await this.getHeaders();
+      const response = await fetch(`${API_URL}/admin/mechanics/${mechanicId}/pay`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ amount, receiptUrl, inspectionIds }),
+      });
+      if (!response.ok) throw new Error('Error registering payment');
+      return await response.json();
+    } catch (error) {
+      console.error('Error registerPayment:', error);
       throw error;
     }
   }

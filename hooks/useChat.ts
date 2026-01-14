@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import apiService from '../services/apiService';
 import authService from '../services/authService';
+import socketService from '../services/socketService';
 
 export function useChatList() {
   const [chats, setChats] = useState<any[]>([]);
@@ -14,7 +15,13 @@ export function useChatList() {
     try {
       setLoading(true);
       const data = await apiService.getChats();
-      setChats(data || []);
+      // Sort by date DESC (Newest activity first)
+      const sorted = (data || []).sort((a, b) => {
+        const dateA = new Date(a.lastMessageDate || 0).getTime();
+        const dateB = new Date(b.lastMessageDate || 0).getTime();
+        return dateB - dateA;
+      });
+      setChats(sorted);
     } catch (error) {
       console.error('Error loading chats:', error);
     } finally {
@@ -54,8 +61,17 @@ export function useChatMessages(chatId: string) {
           text: msg.mensaje,
           createdAt: msg.fechaCreacion,
           isMe: msg.remitenteId === user?.id
-        }));
+        })).reverse(); // Reverse to have newest first for Inverted FlatList
         setMessages(mappedMessages);
+
+        if (user) {
+          apiService.markConversationAsRead(chatId).then(() => {
+            // Trigger global refresh to update badges
+            socketService.loadConversations();
+          }).catch(err => 
+            console.error('Error marking as read inside hook:', err)
+          );
+        }
       }
     } catch (error) {
       console.error('Error loading messages:', error);
@@ -77,7 +93,8 @@ export function useChatMessages(chatId: string) {
         isMe: true
       };
       
-      setMessages(prev => [...prev, mappedMessage]);
+      // Prepend message because FlatList is inverted (Index 0 is at bottom)
+      setMessages(prev => [mappedMessage, ...prev]);
     } catch (error) {
       console.error('Error sending message:', error);
     } finally {

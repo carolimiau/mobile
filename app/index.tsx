@@ -13,16 +13,28 @@ export default function Index() {
   }, []);
 
   const checkAuth = async () => {
+    // Timeout de seguridad por si algo se cuelga (10s)
+    const safetyTimeout = setTimeout(() => {
+      console.log('⚠️ [INDEX] Auth check timed out - forcing redirect to Auth');
+      router.replace('/auth');
+    }, 10000);
+
     try {
+      console.log('🔍 [INDEX] Checking authentication...');
       const isAuthenticated = await authService.isAuthenticated();
+      
       if (isAuthenticated) {
+        console.log('✅ [INDEX] User is authenticated locally');
         // Try to refresh profile from backend to get latest role
         let user = await authService.refreshProfile();
         
         // Fallback to local storage if refresh fails (e.g. offline)
         if (!user) {
+          console.log('⚠️ [INDEX] Refresh failed/timeout, falling back to local storage');
           user = await authService.getUser();
         }
+
+        clearTimeout(safetyTimeout);
 
         // Register for push notifications in background
         registerForPushNotificationsAsync().catch(err => 
@@ -51,9 +63,12 @@ export default function Index() {
           router.replace('/(tabs)');
         }
       } else {
+        clearTimeout(safetyTimeout);
+        console.log('❌ [INDEX] Not authenticated');
         router.replace('/auth');
       }
     } catch (error) {
+      clearTimeout(safetyTimeout);
       console.error('Auth check error:', error);
       router.replace('/auth');
     }

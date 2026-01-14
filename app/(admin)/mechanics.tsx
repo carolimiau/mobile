@@ -8,10 +8,13 @@ import {
   ActivityIndicator,
   Alert,
   TouchableOpacity,
+  Modal,
+  Image,
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import adminService, { Mechanic } from '../../services/adminService';
+import uploadService from '../../services/uploadService';
 import { Screen } from '../../components/ui/Screen';
 import { MechanicCard } from '../../components/admin/MechanicCard';
 import { Button } from '../../components/ui/Button';
@@ -24,6 +27,13 @@ export default function AdminMechanicsScreen() {
   const [expandedMechanicId, setExpandedMechanicId] = useState<string | null>(null);
   const [mechanicInspections, setMechanicInspections] = useState<{[key: string]: any[]}>({});
   const [loadingInspections, setLoadingInspections] = useState<{[key: string]: boolean}>({});
+
+  // Payment states
+  const [showPayModal, setShowPayModal] = useState(false);
+  const [selectedMechanic, setSelectedMechanic] = useState<Mechanic | null>(null);
+  const [debtData, setDebtData] = useState<{totalDebt: number, inspections: any[]} | null>(null);
+  const [receiptImage, setReceiptImage] = useState<string | null>(null);
+  const [uploadingPayment, setUploadingPayment] = useState(false);
 
   const loadMechanics = async () => {
     try {
@@ -72,10 +82,72 @@ export default function AdminMechanicsScreen() {
     });
   };
 
-  const handlePaymentPress = (mechanic: Mechanic) => {
-    // Open payment modal (to be implemented)
-    Alert.alert('Pago', 'Funcionalidad en desarrollo');
+  const handlePaymentPress = async (mechanic: Mechanic) => {
+    try {
+      setSelectedMechanic(mechanic);
+      // Don't set main loading to true to avoid hiding the list, use local state or just show modal loading
+      const data = await adminService.getMechanicDebt(mechanic.id);
+      setDebtData(data);
+      setShowPayModal(true);
+      if (data.totalDebt <= 0) {
+        // Optional: Alert.alert('Info', 'Sin deuda pendiente'); 
+      }
+    } catch (error) {
+      console.error(error);
+      Alert.alert('Error', 'No se pudo obtener la deuda');
+    }
   };
+
+  const handlePickReceipt = async () => {
+    try {
+        const result = await uploadService.pickImage(false); 
+        if (result) {
+            setReceiptImage(result.uri);
+        }
+    } catch (error) {
+        Alert.alert('Error', 'No se pudo seleccionar la imagen');
+    }
+  };
+
+  const handleConfirmPayment = async () => {
+    if (!receiptImage) {
+        Alert.alert('Falta comprobante', 'Debes adjuntar el comprobante.');
+        return;
+    }
+    if (!selectedMechanic || !debtData) return;
+
+    setUploadingPayment(true);
+    try {
+      const folder = 'receipts'; 
+      const uploadedFile = await uploadService.uploadFile(receiptImage, `pago_${selectedMechanic.id}_${Date.now()}.jpg`, 'image/jpeg', folder);
+      
+      const inspectionIds = debtData.inspections.map(i => i.inspectionId);
+      
+      await adminService.registerPayment(
+          selectedMechanic.id,
+          debtData.totalDebt,
+          uploadedFile.publicUrl,
+          inspectionIds
+      );
+
+      Alert.alert('Éxito', 'Pago registrado correctamente');
+      closePaymentModal();
+      loadMechanics(); // Refresh list/stats
+    } catch (error: any) {
+       console.error(error);
+       Alert.alert('Error', error.message || 'Error al registrar el pago');
+    } finally {
+       setUploadingPayment(false);
+    }
+  };
+
+  const closePaymentModal = () => {
+    setShowPayModal(false);
+    setReceiptImage(null);
+    setDebtData(null);
+    setSelectedMechanic(null);
+  };
+
 
   const toggleMechanicInspections = async (mechanicId: string) => {
     if (expandedMechanicId === mechanicId) {
@@ -143,6 +215,55 @@ export default function AdminMechanicsScreen() {
           }
         />
       )}
+      
+      <Modal visible={showPayModal} animationType="slide" transparent onRequestClose={closePaymentModal}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Registrar Pago</Text>
+            {selectedMechanic && (
+              <Text style={styles.modalSubtitle}>Mecánico: {selectedMechanic.firstName} {selectedMechanic.lastName}</Text>
+            )}
+            
+            {debtData ? (
+              <>
+                <Text style={styles.debtAmount}>Total: ${debtData.totalDebt?.toLocaleString('es-CL')}</Text>
+                <Text style={styles.modalInfo}>{debtData.count} inspecciones pendientes de pago</Text>
+              </>
+            ) : (
+              <ActivityIndicator color="#007bff" style={{ marginVertical: 20 }} />
+            )}
+
+            <TouchableOpacity style={styles.uploadArea} onPress={handlePickReceipt}>
+                {receiptImage ? (
+                    <Image source={{ uri: receiptImage }} style={styles.previewImage} />
+                ) : (
+                    <View style={styles.uploadPlaceholder}>
+                      <Ionicons name="cloud-upload-outline" size={40} color="#888" />
+                      <Text style={styles.uploadText}>Adjuntar Comprobante</Text>
+                    </View>
+                )}
+            </TouchableOpacity>
+
+            <View style={styles.modalButtons}>
+                <TouchableOpacity 
+                    style={[styles.modalBtn, styles.cancelBtn]} 
+                    onPress={closePaymentModal}
+                    disabled={uploadingPayment}
+                >
+                    <Text style={styles.cancelText}>Cancelar</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity 
+                    style={[styles.modalBtn, styles.confirmBtn]} 
+                    onPress={handleConfirmPayment}
+                    disabled={uploadingPayment || !debtData || debtData.totalDebt === 0}
+                >
+                    {uploadingPayment ? <ActivityIndicator color="#fff"/> : <Text style={styles.confirmText}>Confirmar</Text>}
+                </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </Screen>
   );
 }
@@ -181,5 +302,98 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 16,
     color: '#666',
+  },
+  modalOverlay: { 
+    flex: 1, 
+    backgroundColor: 'rgba(0,0,0,0.5)', 
+    justifyContent: 'center', 
+    padding: 20 
+  },
+  modalContent: { 
+    backgroundColor: 'white', 
+    borderRadius: 20, 
+    padding: 20, 
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  modalTitle: { 
+    fontSize: 20, 
+    fontWeight: 'bold', 
+    marginBottom: 5 
+  },
+  modalSubtitle: { 
+    fontSize: 16, 
+    color: '#666', 
+    marginBottom: 15 
+  },
+  debtAmount: { 
+    fontSize: 28, 
+    fontWeight: 'bold', 
+    color: '#D32F2F',
+    marginBottom: 5
+  },
+  modalInfo: { 
+    fontSize: 14, 
+    color: '#666', 
+    textAlign: 'center', 
+    marginBottom: 20 
+  },
+  uploadArea: { 
+    width: '100%', 
+    height: 150, 
+    backgroundColor: '#f8f9fa', 
+    borderRadius: 12, 
+    overflow: 'hidden',
+    marginBottom: 20,
+    borderWidth: 2, 
+    borderColor: '#e9ecef', 
+    borderStyle: 'dashed'
+  },
+  uploadPlaceholder: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  uploadText: { 
+    color: '#888', 
+    fontSize: 16, 
+    marginTop: 8 
+  },
+  previewImage: { 
+    width: '100%', 
+    height: '100%', 
+    resizeMode: 'cover' 
+  },
+  modalButtons: { 
+    flexDirection: 'row', 
+    width: '100%', 
+    gap: 12 
+  },
+  modalBtn: { 
+    flex: 1, 
+    padding: 14, 
+    borderRadius: 12, 
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  cancelBtn: { 
+    backgroundColor: '#f1f3f5' 
+  },
+  confirmBtn: { 
+    backgroundColor: '#231F7C' 
+  },
+  cancelText: { 
+    color: '#495057', 
+    fontWeight: '600',
+    fontSize: 16
+  },
+  confirmText: { 
+    color: 'white', 
+    fontWeight: '600',
+    fontSize: 16
   },
 });

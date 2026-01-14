@@ -51,12 +51,6 @@ export default function MenuScreen() {
       onPress: () => router.push('/(tabs)/wallet'),
     },
     {
-      icon: 'settings-outline',
-      title: 'Configuración',
-      subtitle: 'Ajustes de la aplicación',
-      onPress: () => Alert.alert('Próximamente', 'Función en desarrollo'),
-    },
-    {
       icon: 'help-circle-outline',
       title: 'Ayuda y Soporte',
       subtitle: 'Centro de ayuda',
@@ -66,7 +60,7 @@ export default function MenuScreen() {
       icon: 'information-circle-outline',
       title: 'Acerca de',
       subtitle: 'Versión 1.0.0',
-      onPress: () => Alert.alert('AutoBox', 'Versión 1.0.0\n\n© 2024 AutoBox'),
+      onPress: () => Alert.alert('AutoBox', 'Versión 1.0.0\n\n© 2026 AutoBox'),
     },
     {
       icon: 'log-out-outline',
@@ -78,7 +72,7 @@ export default function MenuScreen() {
   ];
 
   return (
-    <Screen backgroundColor="#F5F5F5">
+    <Screen backgroundColor="#F5F5F5" edges={['left', 'right', 'bottom']}>
       <View style={styles.header}>
         <Text style={styles.title}>Menú</Text>
       </View>

@@ -62,7 +62,13 @@ export default function AdminLayout() {
 
   // No mostrar header en pantallas específicas
   const currentSegment = segments[segments.length - 1];
-  const hideHeaderScreens = ['create-mechanic', 'mechanic-schedule', 'notifications'];
+  const hideHeaderScreens = [
+    'create-mechanic', 
+    'mechanic-schedule', 
+    'notifications', 
+    'mechanic-detail', 
+    'mechanic-inspections'
+  ];
   const shouldHideHeader = hideHeaderScreens.includes(currentSegment);
 
   return (

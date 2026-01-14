@@ -20,7 +20,7 @@ interface Notification {
   title: string;
   message: string;
   type: string;
-  isRead: boolean;
+  read: boolean;
   createdAt: string;
   actionUrl?: string;
   metadata?: any;
@@ -43,19 +43,19 @@ const NotificationItem = ({
 
   return (
     <TouchableOpacity
-      style={[styles.notificationItem, !item.isRead && styles.unreadItem]}
+      style={[styles.notificationItem, !item.read && styles.unreadItem]}
       onPress={() => onPress(item)}
     >
-      <View style={[styles.iconContainer, !item.isRead && styles.unreadIconContainer]}>
+      <View style={[styles.iconContainer, !item.read && styles.unreadIconContainer]}>
         <Ionicons 
           name={(item.type === 'inspection_request' || item.type === 'solicitar_mec') ? 'car-sport' : 
                 (item.type === 'cancelado_mec' || item.type === 'cancelado_admin' || item.type === 'cancelado_dueno') ? 'alert-circle' : 'notifications'} 
           size={24} 
-          color={item.isRead ? '#757575' : (item.type === 'cancelado_mec' || item.type === 'cancelado_admin' || item.type === 'cancelado_dueno') ? '#F44336' : '#FF9800'} 
+          color={item.read ? '#757575' : (item.type === 'cancelado_mec' || item.type === 'cancelado_admin' || item.type === 'cancelado_dueno') ? '#F44336' : '#FF9800'} 
         />
       </View>
       <View style={styles.contentContainer}>
-        <Text style={[styles.itemTitle, !item.isRead && styles.unreadTitle]}>
+        <Text style={[styles.itemTitle, !item.read && styles.unreadTitle]}>
           {item.title}
         </Text>
         <Text style={styles.message}>
@@ -65,7 +65,7 @@ const NotificationItem = ({
           {new Date(item.createdAt).toLocaleString('es-CL')}
         </Text>
       </View>
-      {!item.isRead && <View style={styles.dot} />}
+      {!item.read && <View style={styles.dot} />}
     </TouchableOpacity>
   );
 };
@@ -103,10 +103,10 @@ export default function MechanicNotificationsScreen() {
 
   const handleNotificationPress = async (notification: Notification) => {
     try {
-      if (!notification.isRead) {
+      if (!notification.read) {
         await apiService.patch(`/notifications/${notification.id}/read`);
         setNotifications(prev => 
-          prev.map(n => n.id === notification.id ? { ...n, isRead: true } : n)
+          prev.map(n => n.id === notification.id ? { ...n, read: true } : n)
         );
       }
 

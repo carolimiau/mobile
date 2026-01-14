@@ -1117,6 +1117,17 @@ import { API_URL } from '../constants/Config';
       throw error;
     }
   }
+
+  async markConversationAsRead(otherUserId: string): Promise<void> {
+    try {
+      await this.fetch(`/chat/conversation/${otherUserId}/read`, {
+        method: 'PATCH',
+      });
+    } catch (error) {
+      console.error('Error marking conversation as read:', error);
+      // Fail silently to not disrupt UI
+    }
+  }
 }
 
 export default new ApiService();

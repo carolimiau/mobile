@@ -18,7 +18,7 @@ import { Input } from '../../components/ui/Input';
 import { Select } from '../../components/ui/Select';
 import { Button } from '../../components/ui/Button';
 import { ProfileImageUploader } from '../../components/admin/ProfileImageUploader';
-import { SPECIALIZATIONS, NATIONALITIES } from '../../constants/admin';
+import { NATIONALITIES } from '../../constants/admin';
 
 const COMMUNES_SANTIAGO = [
   'Santiago Centro', 'Cerrillos', 'Cerro Navia', 'Conchalí', 'El Bosque', 'Estación Central',
@@ -41,7 +41,6 @@ export default function CreateMechanicScreen() {
     email: '',
     phone: '',
     password: '',
-    specialization: '',
     nationality: '',
     commune: '',
     address: '',
@@ -264,14 +263,6 @@ export default function CreateMechanicScreen() {
                 <RequirementItem valid={passwordErrors.special} text="Un caracter especial (!@#$%...)" />
               </View>
             )}
-
-            <Select
-              label="Especialización"
-              value={formData.specialization}
-              options={SPECIALIZATIONS.map(s => ({ label: s, value: s }))}
-              onChange={(value) => handleChange('specialization', value)}
-              placeholder="Seleccione especialidad"
-            />
 
             <Select
               label="Nacionalidad"

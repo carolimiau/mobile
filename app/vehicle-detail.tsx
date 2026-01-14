@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, Image, Dimensions, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -7,19 +7,66 @@ import { Screen } from '../components/ui/Screen';
 import { Button } from '../components/ui/Button';
 import { useVehicleDetail } from '../hooks/useVehicleDetail';
 import { getImageUrl } from '../utils/imageUtils';
+import ttsService from '../services/ttsService';
 
 const { width } = Dimensions.get('window');
 
 export default function VehicleDetailScreen() {
   const router = useRouter();
   const { vehicle, loading, isLiked, isOwner, toggleLike, deactivateVehicle, refresh } = useVehicleDetail();
+  const [muted, setMuted] = useState(false);
 
   // Refresh when screen comes into focus
   useFocusEffect(
     React.useCallback(() => {
       refresh();
+      return () => {
+         ttsService.stop();
+      };
     }, [refresh])
   );
+
+  const narrationText = useMemo(() => {
+    if (!vehicle) return '';
+    const normalized = {
+      brand: vehicle.marca || vehicle.brand,
+      model: vehicle.modelo || vehicle.model,
+      year: vehicle.anio || vehicle.year,
+      kilometers: vehicle.kilometraje ?? vehicle.kilometers,
+      transmission: vehicle.transmision || vehicle.transmission,
+      fuelType: vehicle.combustible || vehicle.tipoCombustible || vehicle.fuelType,
+      price: vehicle.valor ?? vehicle.price,
+      description: vehicle.descripcion || vehicle.description,
+      observations: vehicle.observacion || vehicle.observations,
+    };
+    return ttsService.generateVehicleNarration(normalized);
+  }, [vehicle]);
+
+  useEffect(() => {
+    let timeout: ReturnType<typeof setTimeout>;
+    // Auto-play TTS on mount
+    if (!loading && vehicle && narrationText && !muted) {
+      timeout = setTimeout(() => {
+        ttsService.speak(narrationText).catch(e => console.log('Error TTS', e));
+      }, 500); 
+    }
+    return () => {
+      clearTimeout(timeout);
+      ttsService.stop();
+    };
+  }, [loading, vehicle, narrationText, muted]);
+
+  const toggleMute = () => {
+    if (muted) {
+      setMuted(false);
+      if (narrationText) {
+        ttsService.speak(narrationText).catch(() => {});
+      }
+    } else {
+      setMuted(true);
+      ttsService.stop();
+    }
+  };
 
   if (loading || !vehicle) {
     return (
@@ -49,6 +96,16 @@ export default function VehicleDetailScreen() {
           <TouchableOpacity style={styles.likeButton} onPress={toggleLike}>
             <Ionicons name={isLiked ? "heart" : "heart-outline"} size={28} color={isLiked ? "#F44336" : "#FFF"} />
           </TouchableOpacity>
+        
+          <View style={styles.muteWrap}>
+            <TouchableOpacity
+              style={[styles.muteButton, muted ? styles.iconBtnMuted : styles.iconBtnUnmuted]}
+              onPress={toggleMute}
+            >
+              <Ionicons name={muted ? 'volume-mute' : 'volume-high'} size={24} color="#FFF" />
+              <Text style={styles.muteLabel}>{muted ? 'Silenciado' : 'Narrando'}</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         <View style={styles.content}>
@@ -80,14 +137,6 @@ export default function VehicleDetailScreen() {
 
           <Text style={styles.sectionTitle}>Descripción</Text>
           <Text style={styles.description}>{vehicle.descripcion || 'Sin descripción'}</Text>
-
-          <View style={styles.divider} />
-
-          <Text style={styles.sectionTitle}>Ubicación</Text>
-          <View style={styles.locationRow}>
-            <Ionicons name="location-outline" size={20} color="#666" />
-            <Text style={styles.locationText}>{vehicle.comuna || 'Comuna'}, {vehicle.region || 'Región'}</Text>
-          </View>
         </View>
       </ScrollView>
 
@@ -209,6 +258,32 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     zIndex: 10,
+  },
+  muteWrap: {
+    position: 'absolute',
+    bottom: 16,
+    right: 16,
+    zIndex: 10,
+  },
+  muteButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 20,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    gap: 8,
+  },
+  muteLabel: {
+    color: '#FFF',
+    fontWeight: 'bold',
+    fontSize: 14,
+  },
+  iconBtnMuted: {
+    opacity: 0.8,
+  },
+  iconBtnUnmuted: {
+    opacity: 1,
   },
   content: {
     padding: 24,

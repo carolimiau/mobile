@@ -38,7 +38,7 @@ export default function PublishScreen() {
   ];
 
   return (
-    <Screen backgroundColor="#F0F2F5">
+    <Screen backgroundColor="#F0F2F5" edges={['left', 'right', 'bottom']}>
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.header}>
           <View style={styles.headerIconContainer}>

@@ -4,6 +4,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Screen } from '../../components/ui/Screen';
 import { Button } from '../../components/ui/Button';
+import { ProfileImageUploader } from '../../components/admin/ProfileImageUploader';
 import adminService, { Mechanic } from '../../services/adminService';
 
 export default function MechanicDetailScreen() {
@@ -17,7 +18,7 @@ export default function MechanicDetailScreen() {
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [phone, setPhone] = useState('');
-  const [specialization, setSpecialization] = useState('');
+  const [profilePhoto, setProfilePhoto] = useState('');
   const [email, setEmail] = useState('');
 
   useEffect(() => {
@@ -35,7 +36,7 @@ export default function MechanicDetailScreen() {
       setFirstName(data.firstName || '');
       setLastName(data.lastName || '');
       setPhone(data.phone || '');
-      setSpecialization(data.specialization || '');
+      setProfilePhoto(data.profilePhoto || '');
       setEmail(data.email || '');
 
     } catch (error) {
@@ -47,6 +48,10 @@ export default function MechanicDetailScreen() {
     }
   };
 
+  const handleImageSelected = (uri: string) => {
+    setProfilePhoto(uri);
+  };
+
   const handleSave = async () => {
     if (!mechanic) return;
     try {
@@ -55,7 +60,7 @@ export default function MechanicDetailScreen() {
         firstName,
         lastName,
         phone,
-        specialization,
+        profilePhoto,
       });
       Alert.alert('Éxito', 'Información actualizada correctamente');
       loadMechanic(); // Reload to be sure
@@ -101,19 +106,15 @@ export default function MechanicDetailScreen() {
         
         {/* Avatar Section */}
         <View style={styles.avatarSection}>
-          <View style={styles.avatarContainer}>
-            {mechanic.profilePhoto ? (
-              <Image source={{ uri: mechanic.profilePhoto }} style={styles.avatar} />
-            ) : (
-              <View style={styles.avatarPlaceholder}>
-                <Text style={styles.avatarText}>
-                  {firstName?.[0]}{lastName?.[0]}
-                </Text>
-              </View>
-            )}
-            <View style={[styles.statusBadge, { backgroundColor: mechanic.status === 'active' ? '#4CAF50' : '#F44336' }]} />
+          <ProfileImageUploader
+              imageUri={profilePhoto}
+              onImageSelected={handleImageSelected}
+              placeholder="Foto"
+          />
+          <View style={{flexDirection: 'row', alignItems: 'center', marginTop: 12}}>
+             <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: mechanic.status === 'active' ? '#4CAF50' : '#F44336', marginRight: 8 }} />
+             <Text style={styles.mechanicName}>{firstName} {lastName}</Text>
           </View>
-          <Text style={styles.mechanicName}>{firstName} {lastName}</Text>
           <Text style={styles.mechanicEmail}>{email}</Text>
         </View>
 
@@ -149,16 +150,6 @@ export default function MechanicDetailScreen() {
               onChangeText={setPhone}
               keyboardType="phone-pad"
               placeholder="+56 9 ..."
-            />
-          </View>
-
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Especialización</Text>
-            <TextInput
-              style={styles.input}
-              value={specialization}
-              onChangeText={setSpecialization}
-              placeholder="Ej: Motores Diesel, Suspensión..."
             />
           </View>
 

@@ -47,7 +47,10 @@ export const MechanicCard: React.FC<MechanicCardProps> = ({
           <View style={styles.ratingContainer}>
             <Ionicons name="star" size={16} color="#FFD700" />
             <Text style={styles.rating}>{mechanic.rating?.toFixed(1) || 'N/A'}</Text>
-            <Text style={styles.inspections}>• {mechanic.completedInspections || 0} inspecciones</Text>
+            <Text style={styles.inspections}>
+              • {mechanic.completedInspections || 0} completas
+              • {mechanic.assignedInspections || 0} asignadas
+            </Text>
           </View>
         </View>
         
@@ -58,12 +61,12 @@ export const MechanicCard: React.FC<MechanicCardProps> = ({
 
       <View style={styles.statsRow}>
         <View style={styles.stat}>
-          <Text style={styles.statLabel}>Saldo</Text>
-          <Text style={styles.statValue}>${mechanic.currentBalance?.toLocaleString('es-CL') || '0'}</Text>
-        </View>
-        <View style={styles.stat}>
           <Text style={styles.statLabel}>Pendiente</Text>
           <Text style={styles.statValue}>${mechanic.pendingPayments?.toLocaleString('es-CL') || '0'}</Text>
+        </View>
+        <View style={styles.stat}>
+          <Text style={styles.statLabel}>Por Pagar</Text>
+          <Text style={styles.statValue}>{mechanic.pendingInspectionsCount || 0} insp.</Text>
         </View>
       </View>
 
@@ -76,7 +79,7 @@ export const MechanicCard: React.FC<MechanicCardProps> = ({
           style={styles.actionButton}
         />
         <Button 
-          title="Pago" 
+          title="Pagar" 
           variant="outline" 
           size="small" 
           onPress={onPaymentPress}

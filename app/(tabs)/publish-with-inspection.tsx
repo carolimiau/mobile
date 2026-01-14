@@ -336,14 +336,14 @@ export default function PublishWithInspectionScreen() {
   );
 
   return (
-    <Screen backgroundColor="#F5F5F5">
+    <Screen backgroundColor="#F5F5F5" edges={['left', 'right', 'bottom']}>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={{ flex: 1 }}
       >
         <View style={styles.header}>
           <View style={styles.headerLeft}>
-            <TouchableOpacity onPress={() => router.back()} style={styles.backButtonHeader}>
+            <TouchableOpacity onPress={() => router.navigate('/(tabs)/publish')} style={styles.backButtonHeader}>
               <Ionicons name="arrow-back" size={24} color="#333" />
             </TouchableOpacity>
             <Text style={styles.headerTitle}>

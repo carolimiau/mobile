@@ -194,7 +194,7 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   forgotPassword: {
-    alignSelf: 'flex-end',
+    alignSelf: 'center',
     marginBottom: 24,
   },
   forgotPasswordText: {

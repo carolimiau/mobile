@@ -22,6 +22,7 @@ export default function SettingsScreen() {
     pricing: {
       inspectionPrice: 0,
       publicationPrice: 0,
+      mechanicBonus: 0,
     },
   });
 
@@ -104,6 +105,22 @@ export default function SettingsScreen() {
               onChangeText={(text) => handleChange('pricing', 'publicationPrice', parseInt(text) || 0)}
               keyboardType="numeric"
               leftIcon={<Text style={styles.currencyPrefix}>$</Text>}
+            />
+
+            <Input
+              label="Bonificación Mecánico (%)"
+              value={settings.pricing.mechanicBonus ? (settings.pricing.mechanicBonus * 100).toFixed(0) : '0'}
+              onChangeText={(text) => {
+                const percentage = parseFloat(text);
+                if (!isNaN(percentage)) {
+                  handleChange('pricing', 'mechanicBonus', percentage / 100);
+                } else {
+                  handleChange('pricing', 'mechanicBonus', 0);
+                }
+              }}
+              keyboardType="numeric"
+              placeholder="Ej: 10, 20, 30"
+              rightIcon={<Text style={styles.currencyPrefix}>%</Text>}
             />
           </View>
 

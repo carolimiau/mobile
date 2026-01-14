@@ -7,6 +7,7 @@ import {
   StyleSheet,
   Platform
 } from "react-native";
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { HeaderProvider, useHeader } from '../../contexts/HeaderContext';
 import { ChatProvider, useChat } from '../../contexts/ChatContext';
 import { useEffect, useState, useCallback } from 'react';
@@ -16,6 +17,7 @@ import { useFocusEffect } from 'expo-router';
 function TabsContent() {
   const router = useRouter();
   const segments = useSegments();
+  const insets = useSafeAreaInsets();
   const { isHeaderVisible } = useHeader();
   const { unreadMessagesCount } = useChat();
   const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0);
@@ -47,7 +49,7 @@ function TabsContent() {
   return (
     <>
       {isHeaderVisible && !shouldHideHeader && (
-        <View style={styles.header}>
+        <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
           <Text style={styles.appTitle}>AutoBox</Text>
           <View style={styles.headerIcons}>
             <TouchableOpacity style={styles.headerIcon} onPress={handleSearchPress}>
@@ -86,8 +88,8 @@ function TabsContent() {
             backgroundColor: '#FFFFFF',
             borderTopWidth: 1,
             borderTopColor: '#E0E0E0',
-            height: Platform.OS === 'ios' ? 85 : 60,
-            paddingBottom: Platform.OS === 'ios' ? 30 : 10,
+            height: 60 + insets.bottom,
+            paddingBottom: insets.bottom + 5,
             paddingTop: 10,
           },
           tabBarActiveTintColor: '#4CAF50',
@@ -162,7 +164,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    paddingTop: Platform.OS === 'ios' ? 50 : 12,
   },
   appTitle: {
     fontSize: 20,

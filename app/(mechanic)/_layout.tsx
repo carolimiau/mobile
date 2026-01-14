@@ -9,29 +9,35 @@ import {
   Alert,
   Platform,
 } from "react-native";
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import authService from '../../services/authService';
 import socketService from '../../services/socketService';
 import apiService from '../../services/apiService';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 
 export default function MechanicLayout() {
   const router = useRouter();
   const [notificationCount, setNotificationCount] = useState(0);
 
-  useEffect(() => {
-    fetchUnreadNotifications();
-  }, []);
-
   const fetchUnreadNotifications = async () => {
     try {
-      // TODO: Implement getUnreadNotificationsCount
-      // const count = await apiService.getUnreadNotificationsCount();
-      // setNotificationCount(count);
+      const count = await apiService.getUnreadNotificationsCount();
+      setNotificationCount(count);
     } catch (error) {
       console.error('Error fetching unread notifications:', error);
     }
   };
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchUnreadNotifications();
+      // Polling every 10 seconds? Admin has 5s. 
+      // User requested "tal cual como en admin". So 5s.
+      const interval = setInterval(fetchUnreadNotifications, 5000);
+      return () => clearInterval(interval);
+    }, [])
+  );
 
   useEffect(() => {
     // Conectar al socket

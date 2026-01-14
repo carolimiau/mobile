@@ -120,10 +120,6 @@ export const VehicleCard: React.FC<VehicleCardProps> = ({
               <Ionicons name="speedometer-outline" size={16} color="#FFF" />
               <Text style={styles.statText}>{(vehicle.kilometraje || vehicle.kilometers || 0).toLocaleString('es-CL')} km</Text>
             </View>
-            <View style={styles.statItem}>
-              <Ionicons name="location-outline" size={16} color="#FFF" />
-              <Text style={styles.statText}>{vehicle.comuna || 'Santiago'}</Text>
-            </View>
           </View>
         </View>
         

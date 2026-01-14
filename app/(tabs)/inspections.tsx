@@ -49,7 +49,7 @@ export default function InspectionsScreen() {
   const data = activeTab === 'requests' ? myInspections : myPublicationInspections;
 
   return (
-    <Screen backgroundColor="#F5F5F5">
+    <Screen backgroundColor="#F5F5F5" edges={['left', 'right', 'bottom']}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Mis Inspecciones</Text>
       </View>

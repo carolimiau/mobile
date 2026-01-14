@@ -44,9 +44,20 @@ export default function ChatListScreen() {
             {lastMessageDate ? new Date(lastMessageDate).toLocaleDateString() : ''}
           </Text>
         </View>
-        <Text style={styles.lastMessage} numberOfLines={1}>
-          {lastMessageText}
-        </Text>
+        <View style={styles.messageRow}>
+          {item.unreadCount > 0 ? (
+            <View style={{ flex: 1 }} />
+          ) : (
+            <Text style={styles.lastMessage} numberOfLines={1}>
+              {lastMessageText}
+            </Text>
+          )}
+          {item.unreadCount > 0 && (
+            <View style={styles.badge}>
+              <Text style={styles.badgeText}>{item.unreadCount}</Text>
+            </View>
+          )}
+        </View>
       </View>
     </TouchableOpacity>
   );
@@ -55,6 +66,9 @@ export default function ChatListScreen() {
   return (
     <Screen backgroundColor="#F5F5F5">
       <View style={styles.header}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <Ionicons name="arrow-back" size={24} color="#333" />
+        </TouchableOpacity>
         <Text style={styles.headerTitle}>Mensajes</Text>
       </View>
 
@@ -82,6 +96,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFF',
     borderBottomWidth: 1,
     borderBottomColor: '#EEE',
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  backButton: {
+    marginRight: 16,
   },
   headerTitle: {
     fontSize: 20,
@@ -145,6 +164,32 @@ const styles = StyleSheet.create({
   lastMessage: {
     fontSize: 14,
     color: '#666',
+    flex: 1,
+  },
+  messageRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 2,
+  },
+  lastMessageBold: {
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  badge: {
+    backgroundColor: '#F44336',
+    borderRadius: 10,
+    minWidth: 20,
+    height: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 6,
+    marginLeft: 8,
+  },
+  badgeText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: 'bold',
   },
   emptyContainer: {
     alignItems: 'center',
