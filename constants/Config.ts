@@ -2,7 +2,7 @@ import { Platform } from 'react-native';
 import * as Device from 'expo-device';
 
 // Allow overriding local IP via Expo public env var
-const DEFAULT_LOCAL_IP = '192.168.0.8';
+const DEFAULT_LOCAL_IP = '192.168.0.6';
 const EMULATOR_IP = '10.0.2.2';
 
 // Automatically detect if running on Android Emulator

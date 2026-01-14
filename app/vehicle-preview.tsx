@@ -165,6 +165,7 @@ const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
   centerFill: { width, height, alignItems: 'center', justifyContent: 'center' },
   loadingText: { marginTop: 12, color: '#666' },
+  emptyText: { marginTop: 12, color: '#CCC', fontSize: 16 },
   image: { width, height },
   topBar: {
     position: 'absolute', top: 40, left: 16, right: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between'

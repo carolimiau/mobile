@@ -130,7 +130,7 @@ class PaymentService {
     }
   }
 
-  async getFinancialSummary(): Promise<{ totalConfirmed: number; totalUserBalance: number }> {
+  async getFinancialSummary(): Promise<{ totalConfirmed: number; totalUserBalance: number; totalMechanicWithdrawals: number }> {
     try {
       return await apiService.fetch('/payments/summary', {
         method: 'GET',
@@ -138,7 +138,7 @@ class PaymentService {
       });
     } catch (error) {
       console.error('Error fetching financial summary:', error);
-      return { totalConfirmed: 0, totalUserBalance: 0 };
+      return { totalConfirmed: 0, totalUserBalance: 0, totalMechanicWithdrawals: 0 };
     }
   }
 

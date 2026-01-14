@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { useRouter } from 'expo-router';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import authService from '../services/authService';
-import { registerForPushNotificationsAsync } from '../services/pushNotificationService';
+import pushNotificationService from '../services/pushNotificationService';
 import { UserRole } from '../types';
 
 export default function Index() {
@@ -37,7 +37,7 @@ export default function Index() {
         clearTimeout(safetyTimeout);
 
         // Register for push notifications in background
-        registerForPushNotificationsAsync().catch(err => 
+        pushNotificationService.registerForPushNotificationsAsync().catch(err => 
           console.error('Error registering push token:', err)
         );
 

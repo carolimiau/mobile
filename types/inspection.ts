@@ -13,6 +13,8 @@ export interface Inspection {
   cancellationReason?: string;
   valor: number;
   rating?: number;
+  answers?: Record<string, string>;
+  comments?: Record<string, string>;
   
   // Relaciones (opcionales dependiendo de la query)
   solicitante?: {

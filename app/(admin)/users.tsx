@@ -19,7 +19,7 @@ export default function UsersScreen() {
   const loadUsers = async () => {
     try {
       setLoading(true);
-      const data = await adminService.getUsers();
+      const data: any = await adminService.getUsers();
       // Ensure we have an array
       let usersList = [];
       if (Array.isArray(data)) {

@@ -395,9 +395,9 @@ export function usePublishWithInspection() {
       router.push({
         pathname: '/(tabs)/publish/payment-gateway',
         params: {
-          amount: (inspectionPrice + publicationPrice).toString(),
+          amount: (Number(inspectionPrice) + Number(publicationPrice)).toString(),
           description: 'Inspección + Publicación Premium',
-          serviceType: 'inspection_publish',
+          serviceType: 'publication_with_inspection',
           metadata: JSON.stringify(vehicleData)
         }
       });

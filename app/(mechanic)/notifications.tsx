@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   Alert,
   Modal,
+  Linking,
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -49,9 +50,12 @@ const NotificationItem = ({
       <View style={[styles.iconContainer, !item.read && styles.unreadIconContainer]}>
         <Ionicons 
           name={(item.type === 'inspection_request' || item.type === 'solicitar_mec') ? 'car-sport' : 
-                (item.type === 'cancelado_mec' || item.type === 'cancelado_admin' || item.type === 'cancelado_dueno') ? 'alert-circle' : 'notifications'} 
+                (item.type === 'cancelado_mec' || item.type === 'cancelado_admin' || item.type === 'cancelado_dueno') ? 'alert-circle' : 
+                (item.type === 'pago_recibido_mec') ? 'cash' : 'notifications'} 
           size={24} 
-          color={item.read ? '#757575' : (item.type === 'cancelado_mec' || item.type === 'cancelado_admin' || item.type === 'cancelado_dueno') ? '#F44336' : '#FF9800'} 
+          color={item.read ? '#757575' : 
+                (item.type === 'cancelado_mec' || item.type === 'cancelado_admin' || item.type === 'cancelado_dueno') ? '#F44336' : 
+                (item.type === 'pago_recibido_mec') ? '#4CAF50' : '#FF9800'} 
         />
       </View>
       <View style={styles.contentContainer}>
@@ -77,6 +81,7 @@ export default function MechanicNotificationsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [selectedNotification, setSelectedNotification] = useState<Notification | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
+  const [paymentModalVisible, setPaymentModalVisible] = useState(false);
 
   const loadNotifications = async () => {
     try {
@@ -108,6 +113,13 @@ export default function MechanicNotificationsScreen() {
         setNotifications(prev => 
           prev.map(n => n.id === notification.id ? { ...n, read: true } : n)
         );
+      }
+
+      // Manejar notificación de pago
+      if (notification.type === 'pago_recibido_mec') {
+        setSelectedNotification(notification);
+        setPaymentModalVisible(true);
+        return;
       }
 
       // Check if already handled based on message content
@@ -183,6 +195,34 @@ export default function MechanicNotificationsScreen() {
     }
   };
 
+  const handleOpenReceipt = async () => {
+    try {
+      // Obtener el detalle del pago desde el backend
+      const paymentId = selectedNotification?.relatedId;
+      if (!paymentId) {
+        Alert.alert('Error', 'No se encontró el ID del pago');
+        return;
+      }
+
+      const payment = await apiService.get(`/admin/mechanic-payments/${paymentId}`);
+      const receiptUrl = payment.comprobante_url;
+
+      if (receiptUrl) {
+        const supported = await Linking.canOpenURL(receiptUrl);
+        if (supported) {
+          await Linking.openURL(receiptUrl);
+        } else {
+          Alert.alert('Error', 'No se puede abrir el comprobante');
+        }
+      } else {
+        Alert.alert('Error', 'No hay comprobante disponible');
+      }
+    } catch (error) {
+      console.error('Error opening receipt:', error);
+      Alert.alert('Error', 'No se pudo abrir el comprobante');
+    }
+  };
+
   return (
     <Screen style={styles.container}>
       {loading && !refreshing ? (
@@ -245,6 +285,49 @@ export default function MechanicNotificationsScreen() {
               onPress={() => setModalVisible(false)}
             >
               <Text style={styles.closeButtonText}>Cancelar</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Modal de Pago */}
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={paymentModalVisible}
+        onRequestClose={() => setPaymentModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={[styles.iconContainer, { backgroundColor: '#E8F5E9', marginBottom: 16 }]}>
+              <Ionicons name="cash" size={48} color="#4CAF50" />
+            </View>
+            
+            <Text style={styles.modalTitle}>Pago Recibido</Text>
+            <Text style={styles.modalMessage}>
+              {selectedNotification?.message}
+            </Text>
+            
+            <View style={styles.paymentDetails}>
+              <Text style={styles.paymentLabel}>Fecha:</Text>
+              <Text style={styles.paymentValue}>
+                {selectedNotification?.createdAt ? new Date(selectedNotification.createdAt).toLocaleDateString('es-CL') : 'N/A'}
+              </Text>
+            </View>
+            
+            <TouchableOpacity 
+              style={styles.receiptButton} 
+              onPress={handleOpenReceipt}
+            >
+              <Ionicons name="document-text" size={20} color="#FFF" />
+              <Text style={styles.receiptButtonText}>Ver Comprobante</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity 
+              style={styles.closeButton}
+              onPress={() => setPaymentModalVisible(false)}
+            >
+              <Text style={styles.closeButtonText}>Cerrar</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -401,5 +484,40 @@ const styles = StyleSheet.create({
   closeButtonText: {
     color: '#999',
     fontSize: 14,
+  },
+  paymentDetails: {
+    width: '100%',
+    backgroundColor: '#F5F5F5',
+    padding: 16,
+    borderRadius: 8,
+    marginBottom: 16,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  paymentLabel: {
+    fontSize: 14,
+    color: '#666',
+  },
+  paymentValue: {
+    fontSize: 14,
+    color: '#333',
+    fontWeight: '600',
+  },
+  receiptButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#4CAF50',
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 8,
+    width: '100%',
+    marginBottom: 12,
+    gap: 8,
+  },
+  receiptButtonText: {
+    color: '#FFF',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });

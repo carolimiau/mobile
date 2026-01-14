@@ -11,25 +11,64 @@ import authService from '../../../services/authService';
 import { useWallet } from '../../../hooks/useWallet';
 import { API_URL, LOCAL_IP } from '../../../constants/Config';
 
+// Configuración de reintentos
+const MAX_RETRIES = 2; // Reducido de 3 a 2
+const RETRY_DELAY_MS = 1000; // Reducido de 2000 a 1000
+const TIMEOUT_MS = 10000; // Reducido de 30000 a 10000
+
+interface PaymentError {
+  code: string;
+  message: string;
+  retryable: boolean;
+  userMessage: string;
+}
+
 export default function PaymentGatewayScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const { balance, refresh: refreshWallet } = useWallet();
   const [loading, setLoading] = useState(false);
-  const [paymentStatus, setPaymentStatus] = useState<'pending' | 'success' | 'failure' | 'cancelled'>('pending');
+  const [paymentStatus, setPaymentStatus] = useState<'pending' | 'success' | 'failure' | 'cancelled' | 'verifying'>('pending');
   const [isWaitingForPayment, setIsWaitingForPayment] = useState(false);
   const [selectedMethod, setSelectedMethod] = useState<'webpay' | 'wallet'>('webpay');
   const [prices, setPrices] = useState<{ nombre: string; precio: number }[]>([]);
   const [webviewVisible, setWebviewVisible] = useState(false);
   const [webviewUrl, setWebviewUrl] = useState<string | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
+  const [errorDetails, setErrorDetails] = useState<PaymentError | null>(null);
+  const [reconciliationNeeded, setReconciliationNeeded] = useState(false);
+  const [isConfirming, setIsConfirming] = useState(false);
 
   const { width, height } = useWindowDimensions();
   const isLandscape = width > height;
 
   const { amount, description, serviceType, metadata } = params;
 
+  // Logging detallado
+  const logPaymentEvent = (event: string, data?: any, level: 'info' | 'warn' | 'error' = 'info') => {
+    const timestamp = new Date().toISOString();
+    const logEntry = {
+      timestamp,
+      event,
+      data,
+      amount,
+      serviceType,
+      paymentMethod: selectedMethod,
+      retryCount,
+    };
+    
+    const prefix = level === 'error' ? '❌' : level === 'warn' ? '⚠️' : '✅';
+    console.log(`${prefix} [PaymentGateway] ${event}:`, logEntry);
+    
+    // TODO: Enviar logs críticos al backend para monitoreo
+    if (level === 'error') {
+      // apiService.post('/logs/payment-error', logEntry).catch(() => {});
+    }
+  };
+
   useEffect(() => {
     loadPrices();
+    logPaymentEvent('Payment Gateway Initialized');
     const subscription = AppState.addEventListener('change', handleAppStateChange);
     return () => subscription.remove();
   }, [isWaitingForPayment]);
@@ -43,6 +82,114 @@ export default function PaymentGatewayScreen() {
     }
   };
 
+  // Función de reintentos con backoff exponencial
+  const executeWithRetry = async <T,>(
+    fn: () => Promise<T>,
+    operation: string,
+    currentRetry = 0
+  ): Promise<T> => {
+    try {
+      const timeoutPromise = new Promise<never>((_, reject) => 
+        setTimeout(() => reject(new Error('TIMEOUT')), TIMEOUT_MS)
+      );
+      
+      const result = await Promise.race([fn(), timeoutPromise]);
+      
+      if (currentRetry > 0) {
+        logPaymentEvent(`${operation} succeeded after ${currentRetry} retries`);
+      }
+      
+      return result;
+    } catch (error: any) {
+      const errorCode = error?.code || error?.message || 'UNKNOWN';
+      const isNetworkError = ['TIMEOUT', 'ECONNREFUSED', 'ENOTFOUND', 'ETIMEDOUT', 'Network request failed'].some(
+        code => errorCode.includes(code)
+      );
+      
+      logPaymentEvent(`${operation} failed`, { 
+        error: errorCode, 
+        retry: currentRetry,
+        isNetworkError 
+      }, 'error');
+
+      // Reintentar solo errores de red
+      if (isNetworkError && currentRetry < MAX_RETRIES) {
+        const delay = RETRY_DELAY_MS * Math.pow(2, currentRetry); // Backoff exponencial
+        logPaymentEvent(`Retrying ${operation} in ${delay}ms`, { attempt: currentRetry + 1 }, 'warn');
+        
+        await new Promise(resolve => setTimeout(resolve, delay));
+        setRetryCount(currentRetry + 1);
+        return executeWithRetry(fn, operation, currentRetry + 1);
+      }
+      
+      throw error;
+    }
+  };
+
+  // Clasificar y categorizar errores
+  const categorizeError = (error: any): PaymentError => {
+    const errorMsg = error?.message || error?.toString() || 'Error desconocido';
+    const errorCode = error?.code || error?.response?.status?.toString() || 'UNKNOWN';
+
+    // Error 422: Transacción ya procesada (NO reintentar)
+    if (errorCode === '422' || errorMsg.includes('already locked') || errorMsg.includes('Invalid status')) {
+      return {
+        code: 'ALREADY_PROCESSED',
+        message: errorMsg,
+        retryable: false,
+        userMessage: 'Esta transacción ya fue procesada. Verificando estado...'
+      };
+    }
+
+    // Errores de red
+    if (['TIMEOUT', 'ECONNREFUSED', 'ENOTFOUND', 'ETIMEDOUT'].some(code => errorMsg.includes(code))) {
+      return {
+        code: 'NETWORK_ERROR',
+        message: errorMsg,
+        retryable: true,
+        userMessage: 'Problemas de conexión. Estamos verificando el estado de tu pago...'
+      };
+    }
+
+    // Errores de configuración (401, 403)
+    if (['401', '403'].includes(errorCode)) {
+      return {
+        code: 'AUTH_ERROR',
+        message: errorMsg,
+        retryable: false,
+        userMessage: 'Error de configuración. Contacta a soporte.'
+      };
+    }
+
+    // Errores de validación (400)
+    if (errorCode === '400') {
+      return {
+        code: 'VALIDATION_ERROR',
+        message: errorMsg,
+        retryable: false,
+        userMessage: 'Los datos del pago son inválidos. Verifica e intenta nuevamente.'
+      };
+    }
+
+    // Errores de Webpay caído (503)
+    if (errorCode === '503') {
+      return {
+        code: 'SERVICE_UNAVAILABLE',
+        message: errorMsg,
+        retryable: true,
+        userMessage: 'El servicio de pago está temporalmente no disponible. Intenta en unos minutos.'
+      };
+    }
+
+    // Error genérico
+    return {
+      code: 'UNKNOWN_ERROR',
+      message: errorMsg,
+      retryable: false,
+      userMessage: 'Ocurrió un error inesperado. Contacta a soporte si el problema persiste.'
+    };
+  };
+
   const handleAppStateChange = async (nextAppState: string) => {
     if (nextAppState === 'active' && isWaitingForPayment) {
       console.log('App volvió del navegador, verificando pago...');
@@ -51,113 +198,280 @@ export default function PaymentGatewayScreen() {
   };
 
   const checkPendingPayment = async () => {
+    // Prevenir confirmaciones concurrentes
+    if (isConfirming) {
+      logPaymentEvent('Already confirming payment, skipping', {}, 'warn');
+      return;
+    }
+
     try {
+      setIsConfirming(true);
       setLoading(true);
+      setPaymentStatus('verifying');
+      logPaymentEvent('Checking pending payment');
       
-      // Verificar si hay un token pendiente en el backend
-      const response = await apiService.get('/payments/webpay/check-pending');
+      const savedPaymentId = await AsyncStorage.getItem('waitingForPayment');
+      if (!savedPaymentId) {
+        logPaymentEvent('No pending payment found', {}, 'warn');
+        setLoading(false);
+        setIsConfirming(false);
+        return;
+      }
+
+      // Verificar con reintentos
+      const response = await executeWithRetry(
+        () => apiService.get('/payments/webpay/check-pending'),
+        'check_pending_payment'
+      );
       
       if (response && response.hasPending && response.token) {
-        console.log('Token pendiente encontrado:', response.token);
+        logPaymentEvent('Pending payment found', { token: response.token.substring(0, 10) + '...' });
 
-        // Confirmar el pago
-        const result = await apiService.confirmWebPayTransaction(response.token);
-        const isAuthorized = result?.success === true
-          || result?.data?.status === 'AUTHORIZED'
-          || result?.transaction?.status === 'AUTHORIZED'
-          || (result?.transaction && result.transaction.response_code === 0)
+        // Confirmar el pago (sin reintentos automáticos para evitar 422)
+        let result;
+        try {
+          result = await apiService.confirmWebPayTransaction(response.token);
+        } catch (confirmError: any) {
+          // Si es error 422, verificar el estado del pago en lugar de fallar
+          if (confirmError?.message?.includes('422') || 
+              confirmError?.message?.includes('already locked') || 
+              confirmError?.message?.includes('Invalid status')) {
+            logPaymentEvent('Transaction already processed, checking payment status', {}, 'warn');
+            
+            // Verificar el estado del pago directamente
+            const paymentCheck = await apiService.get(`/payments/${savedPaymentId}`);
+            if (paymentCheck?.estado === 'Completado') {
+              logPaymentEvent('Payment confirmed as completed', { paymentId: savedPaymentId });
+              result = { success: true, status: 'AUTHORIZED', alreadyProcessed: true };
+            } else {
+              throw confirmError;
+            }
+          } else {
+            throw confirmError;
+          }
+        }
+        
+        logPaymentEvent('WebPay confirmation response', { 
+          status: result?.status,
+          responseCode: result?.response_code,
+          authorizationCode: result?.authorization_code,
+          fullResult: result
+        });
+
+        // El payment service devuelve la transacción directamente (no anidada)
+        const isAuthorized = result?.response_code === 0
           || result?.status === 'AUTHORIZED';
 
+        console.log('🔍 isAuthorized:', isAuthorized, '| response_code:', result?.response_code, '| status:', result?.status);
+
         if (isAuthorized) {
-          // Pago exitoso, actualizar estado y procesar la publicación e inspección
+          logPaymentEvent('Payment authorized', { paymentId: savedPaymentId });
+          
+          // Update state IMMEDIATELY to success
           setPaymentStatus('success');
           setIsWaitingForPayment(false);
-          const savedPaymentId = await AsyncStorage.getItem('waitingForPayment');
+          setLoading(true); // Mantener loading mientras procesa entidades
           await AsyncStorage.removeItem('waitingForPayment');
-          await processSuccessfulPayment(savedPaymentId || undefined);
-        } else {
-          // Pago rechazado
+          
+          // Process successful payment
+          try {
+            await processSuccessfulPayment(savedPaymentId);
+            logPaymentEvent('Successfully processed payment entities');
+          } catch (processError: any) {
+            logPaymentEvent('Error processing payment entities', { error: processError?.message }, 'error');
+            console.error('❌ Error in processSuccessfulPayment:', processError);
+            // Already set to success, so user sees payment succeeded even if post-processing failed
+          } finally {
+            setLoading(false);
+          }
+        } else if (result?.transaction?.response_code && result.transaction.response_code > 0) {
+          // Rechazo explícito del banco
+          const responseCode = result.transaction.response_code;
+          logPaymentEvent('Payment rejected by bank', { responseCode }, 'warn');
+          
           setIsWaitingForPayment(false);
           await AsyncStorage.removeItem('waitingForPayment');
           
+          // Marcar pago como fallido en backend
+          await markPaymentCancelled(savedPaymentId, `Rechazado por el banco (código: ${responseCode})`);
+          
           Alert.alert(
             'Pago Rechazado',
-            'Tu pago no pudo ser procesado. Por favor, intenta nuevamente.',
-            [{ text: 'OK' }]
+            'Tu pago fue rechazado por el banco. Verifica los datos de tu tarjeta e intenta nuevamente.',
+            [{ text: 'OK', onPress: () => setPaymentStatus('pending') }]
           );
+          setLoading(false);
+        } else {
+          // Estado ambiguo - mantener verificando
+          logPaymentEvent('Ambiguous payment state - continuing verification', { result }, 'warn');
+          setReconciliationNeeded(true);
+          // Mantener en estado 'verifying' para que el usuario vea el mensaje en pantalla
+          setPaymentStatus('verifying');
           setLoading(false);
         }
       } else {
-        // No hay pago pendiente o no se encontró token
+        // No hay respuesta de WebPay - mantener verificando
+        logPaymentEvent('No pending payment response from backend', {}, 'warn');
+        setReconciliationNeeded(true);
+        setPaymentStatus('verifying');
         setLoading(false);
       }
-    } catch (error) {
-      console.error('Error al verificar pago pendiente:', error);
-      Alert.alert('Error', 'Hubo un problema al procesar tu pago. Por favor, contacta a soporte.');
+    } catch (error: any) {
+      logPaymentEvent('Error checking pending payment', { error: error?.message }, 'error');
+      
+      const errorCategory = categorizeError(error);
+      setErrorDetails(errorCategory);
+      
+      // Si es error 422, verificar estado final del pago
+      if (errorCategory.code === 'ALREADY_PROCESSED') {
+        const savedPaymentId = await AsyncStorage.getItem('waitingForPayment');
+        if (savedPaymentId) {
+          try {
+            const paymentCheck = await apiService.get(`/payments/${savedPaymentId}`);
+            if (paymentCheck?.estado === 'Completado') {
+              logPaymentEvent('Payment verified as completed after 422 error');
+              setPaymentStatus('success');
+              setIsWaitingForPayment(false);
+              await AsyncStorage.removeItem('waitingForPayment');
+              setLoading(true);
+              try {
+                await processSuccessfulPayment(savedPaymentId);
+              } catch (e) {
+                console.error('Error processing after verification:', e);
+              } finally {
+                setLoading(false);
+              }
+              setIsConfirming(false);
+              return;
+            }
+          } catch (e) {
+            logPaymentEvent('Could not verify payment status', { error: e }, 'error');
+          }
+        }
+      }
+      
+      setReconciliationNeeded(true);
+      
+      // No marcar como fallido - mantener verificando
+      setPaymentStatus('verifying');
       setLoading(false);
+    } finally {
+      setIsConfirming(false);
     }
   };
 
   const handlePayment = async () => {
+    // Validaciones previas
+    const amountNum = Number(amount);
+    if (isNaN(amountNum) || amountNum <= 0) {
+      logPaymentEvent('Invalid amount', { amount }, 'error');
+      Alert.alert('Error', 'Monto inválido. Por favor, intenta nuevamente.');
+      return;
+    }
+
+    if (amountNum > 10000000) { // 10M max
+      logPaymentEvent('Amount exceeds limit', { amount }, 'error');
+      Alert.alert('Error', 'El monto excede el límite permitido.');
+      return;
+    }
+
     setLoading(true);
+    setErrorDetails(null);
+
     try {
       if (selectedMethod === 'wallet') {
-        if (balance < Number(amount)) {
+        logPaymentEvent('Wallet payment initiated', { balance, amount });
+        
+        if (balance < amountNum) {
+           logPaymentEvent('Insufficient balance', { balance, required: amountNum }, 'warn');
            Alert.alert('Saldo Insuficiente', 'No tienes suficiente saldo para realizar este pago.');
            setLoading(false);
            return;
         }
         
-        console.log('Procesando pago con billetera...');
-        // Realizar pago con billetera
         const descriptionStr = Array.isArray(description) ? description[0] : description;
-        const walletResponse = await apiService.post('/wallet/payment', {
-           amount: Number(amount),
-           description: descriptionStr || 'Pago de servicio'
-        });
+        const walletResponse = await executeWithRetry(
+          () => apiService.post('/wallet/payment', {
+            amount: amountNum,
+            description: descriptionStr || 'Pago de servicio'
+          }),
+          'wallet_payment'
+        );
         
-        console.log('Pago con billetera exitoso', walletResponse);
-        // Si no hay error, procesar éxito pasando el paymentId
         if (walletResponse && walletResponse.success) {
-          await processSuccessfulPayment(walletResponse.paymentId);
-          refreshWallet();
+          logPaymentEvent('Wallet payment success', { paymentId: walletResponse.paymentId });
+          try {
+            await processSuccessfulPayment(walletResponse.paymentId);
+            refreshWallet();
+          } catch (paymentError: any) {
+            console.error('❌ Error en processSuccessfulPayment (wallet):', paymentError);
+            setLoading(false);
+            // El error ya fue mostrado por processSuccessfulPayment
+          }
         } else {
           throw new Error('La respuesta del pago no fue exitosa');
         }
+        setLoading(false);
         return;
       }
 
       // MODO WEBPAY: crear registro de Payment en backend, luego crear transacción WebPay
+      logPaymentEvent('WebPay payment initiated');
+      
       const user = await authService.getUser();
-      if (!user) throw new Error('Usuario no autenticado');
-
-      // Crear registro de pago para obtener UUID (evita "payment must be UUID")
-      const createdPayment = await apiService.post('/payments', {
-        usuarioId: user.id,
-        monto: Number(amount),
-        metodo: 'WebPay',
-      });
-
-      const paymentId = createdPayment?.id;
-      if (!paymentId) throw new Error('No se pudo crear el registro de pago');
-
-      // Guardar el paymentId para usarlo después al finalizar el pago
-      await AsyncStorage.setItem('waitingForPayment', paymentId);
-
-      // Crear transacción de WebPay en el backend
-      const webpayData = await apiService.createWebPayTransaction({
-        amount: Number(amount),
-        returnUrl: `${API_URL}/payments/webpay/callback`,
-        paymentId,
-      });
-
-      console.log('Respuesta de WebPay:', webpayData);
-
-      if (!webpayData || !webpayData.url) {
-        throw new Error('No se recibió una URL válida de WebPay');
+      if (!user) {
+        logPaymentEvent('User not authenticated', {}, 'error');
+        throw new Error('Usuario no autenticado');
       }
 
-      console.log('URL de WebPay:', webpayData.url);
+      logPaymentEvent('Creating payment record', { userId: user.id, amount: amountNum });
+
+      // Crear registro de pago con reintentos
+      const createdPayment = await executeWithRetry(
+        () => apiService.post('/payments', {
+          usuarioId: user.id,
+          monto: amountNum,
+          metodo: 'WebPay',
+        }),
+        'create_payment_record'
+      );
+
+      const paymentId = createdPayment?.id;
+      if (!paymentId) {
+        logPaymentEvent('Payment record creation failed', { response: createdPayment }, 'error');
+        throw new Error('No se pudo crear el registro de pago');
+      }
+
+      logPaymentEvent('Payment record created', { paymentId });
+
+      // Guardar el paymentId para reconciliación
+      await AsyncStorage.setItem('waitingForPayment', paymentId);
+      await AsyncStorage.setItem(`payment_${paymentId}_timestamp`, Date.now().toString());
+      await AsyncStorage.setItem(`payment_${paymentId}_amount`, amountNum.toString());
+
+      logPaymentEvent('Creating WebPay transaction', { paymentId });
+
+      // Crear transacción de WebPay con reintentos
+      const webpayData = await executeWithRetry(
+        () => apiService.createWebPayTransaction({
+          amount: amountNum,
+          returnUrl: `${API_URL}/payments/webpay/callback`,
+          paymentId,
+        }),
+        'create_webpay_transaction'
+      );
+
+      logPaymentEvent('WebPay transaction created', { 
+        hasUrl: !!webpayData?.url,
+        token: webpayData?.token?.substring(0, 10) + '...' 
+      });
+
+      if (!webpayData || !webpayData.url) {
+        logPaymentEvent('Invalid WebPay response', { webpayData }, 'error');
+        // Marcar como necesita reconciliación
+        setReconciliationNeeded(true);
+        throw new Error('No se recibió una URL válida de WebPay');
+      }
 
       setIsWaitingForPayment(true);
 
@@ -175,10 +489,29 @@ export default function PaymentGatewayScreen() {
         );
       }
     } catch (error: any) {
-      console.error('Error al iniciar pago:', error);
-      Alert.alert('Error', error.message || 'No se pudo iniciar el pago');
-      setIsWaitingForPayment(false);
-      setLoading(false);
+      logPaymentEvent('Payment initiation failed', { error: error?.message }, 'error');
+      
+      const errorCategory = categorizeError(error);
+      setErrorDetails(errorCategory);
+      
+      if (errorCategory.retryable && retryCount < MAX_RETRIES) {
+        Alert.alert(
+          'Error Temporal',
+          errorCategory.userMessage + ' ¿Deseas reintentar?',
+          [
+            { text: 'Cancelar', style: 'cancel', onPress: () => setLoading(false) },
+            { text: 'Reintentar', onPress: () => {
+              setRetryCount(retryCount + 1);
+              setTimeout(() => handlePayment(), 1000);
+            }}
+          ]
+        );
+      } else {
+        Alert.alert('Error', errorCategory.userMessage);
+        setIsWaitingForPayment(false);
+        setLoading(false);
+        setPaymentStatus('failure');
+      }
     }
   };
 
@@ -301,16 +634,16 @@ export default function PaymentGatewayScreen() {
         marca: vehicleData.brand,
         modelo: vehicleData.model,
         version: vehicleData.version,
-        anio: parseInt(vehicleData.year),
+        anio: typeof vehicleData.year === 'number' ? vehicleData.year : parseInt(String(vehicleData.year)),
         color: vehicleData.color,
-        kilometraje: parseInt(vehicleData.kilometers.replace(/\./g, '')),
+        kilometraje: typeof vehicleData.kilometers === 'number' ? vehicleData.kilometers : Number(String(vehicleData.kilometers ?? '0').replace(/\D/g, '')),
         transmision: vehicleData.transmission,
         tipoCombustible: vehicleData.fuelType,
         tipoCarroceria: vehicleData.bodyType,
-        puertas: parseInt(vehicleData.doors),
-        vin: vehicleData.vin,
-        motor: vehicleData.motor,
-        numeroMotor: vehicleData.numeroMotor,
+        puertas: typeof vehicleData.doors === 'number' ? vehicleData.doors : (Number(String(vehicleData.doors ?? '4').replace(/\D/g, '')) || 4),
+        vin: vehicleData.vin || '',
+        motor: vehicleData.motor || '',
+        numeroMotor: vehicleData.numeroMotor || '',
         tipoVehiculo: vehicleData.tipoVehiculo,
         imagenes: vehicleData.images || []
       };
@@ -327,12 +660,12 @@ export default function PaymentGatewayScreen() {
 
       // 3. Crear publicación
       const publicationData = {
-        usuarioId: user.id,
+        vendedorId: user.id,
         vehiculoId: vehicleResponse.id,
-        precio: parseInt(vehicleData.price.replace(/\./g, '')),
-        descripcion: vehicleData.description,
-        tipoPublicacion: 'Venta',
-        estado: 'Pendiente'
+        valor: typeof vehicleData.price === 'number' ? vehicleData.price : Number(String(vehicleData.price ?? '0').replace(/\D/g, '')),
+        descripcion: vehicleData.description || '',
+        estado: 'Pendiente',
+        fotos: vehicleData.images || []
       };
 
       console.log('Creando publicación:', publicationData);
@@ -346,22 +679,74 @@ export default function PaymentGatewayScreen() {
 
       // 4. Si es con inspección, agendarla
       if (serviceTypeStr === 'publication_with_inspection') {
-        const { inspectionDate, inspectionTime, inspectionLocation } = vehicleData;
-        console.log('Agendando inspección...', { inspectionDate, inspectionTime, inspectionLocation });
+        const { inspectionDate, inspectionTime, inspectionLocation, horarioId } = vehicleData;
+        console.log('Agendando inspección...', { inspectionDate, inspectionTime, inspectionLocation, horarioId });
 
         let fechaProgramada = new Date().toISOString();
         if (inspectionDate && inspectionTime) {
-             const [hours, minutes] = inspectionTime.split(':');
-             const dateObj = new Date(inspectionDate);
-             dateObj.setHours(parseInt(hours), parseInt(minutes), 0, 0);
-             fechaProgramada = dateObj.toISOString();
+          try {
+            const [hours, minutes] = inspectionTime.split(':');
+            let dateObj: Date;
+            
+            // Manejar diferentes formatos de fecha
+            if (typeof inspectionDate === 'string') {
+              // Si ya es ISO string
+              if (inspectionDate.includes('T')) {
+                dateObj = new Date(inspectionDate);
+              } 
+              // Si es formato DD/MM/YYYY
+              else if (inspectionDate.includes('/')) {
+                const [day, month, year] = inspectionDate.split('/');
+                dateObj = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+              }
+              // Si es formato YYYY-MM-DD
+              else if (inspectionDate.includes('-')) {
+                dateObj = new Date(inspectionDate);
+              }
+              // Intentar parseo directo
+              else {
+                dateObj = new Date(inspectionDate);
+              }
+            } else if (inspectionDate instanceof Date) {
+              dateObj = new Date(inspectionDate);
+            } else {
+              // Fallback: usar la fecha actual
+              console.warn('⚠️ Formato de fecha no reconocido, usando fecha actual');
+              dateObj = new Date();
+            }
+            
+            // Validar que la fecha es válida
+            if (isNaN(dateObj.getTime())) {
+              console.error('❌ Fecha inválida después del parseo:', inspectionDate);
+              throw new Error('Fecha de inspección inválida');
+            }
+            
+            dateObj.setHours(parseInt(hours), parseInt(minutes), 0, 0);
+            
+            // Validar nuevamente después de setHours
+            if (isNaN(dateObj.getTime())) {
+              console.error('❌ Fecha inválida después de setHours');
+              throw new Error('Hora de inspección inválida');
+            }
+            
+            fechaProgramada = dateObj.toISOString();
+            console.log('✅ Fecha programada parseada:', fechaProgramada);
+          } catch (dateError) {
+            console.error('❌ Error parseando fecha de inspección:', dateError);
+            // Usar fecha actual + 1 día como fallback
+            const fallbackDate = new Date();
+            fallbackDate.setDate(fallbackDate.getDate() + 1);
+            fallbackDate.setHours(10, 0, 0, 0);
+            fechaProgramada = fallbackDate.toISOString();
+            console.log('⚠️ Usando fecha fallback:', fechaProgramada);
+          }
         }
 
         const inspectionData = {
           solicitanteId: user.id,
           publicacionId: publicationResponse.id,
-          sedeId: inspectionLocation, 
-          // horarioId: undefined, // Si tu backend requiere ID de horario, deberás pasarlo aqui
+          sedeId: inspectionLocation,
+          horarioId: horarioId ? Number(horarioId) : undefined,
           fechaProgramada: fechaProgramada,
           valor: prices.find(p => p.nombre.toLowerCase() === 'inspeccion')?.precio || 40000,
           estado: 'Solicitada',
@@ -369,6 +754,7 @@ export default function PaymentGatewayScreen() {
           paymentId: paymentId
         };
 
+        console.log('Datos de inspección a crear:', inspectionData);
         await apiService.createInspection(inspectionData);
         console.log('Inspección creada correctamente');
       }
@@ -377,19 +763,50 @@ export default function PaymentGatewayScreen() {
       setIsWaitingForPayment(false);
       await AsyncStorage.removeItem('waitingForPayment');
 
-    } catch (error) {
-      console.error('Error procesando pago exitoso:', error);
-      Alert.alert('Error', 'El pago fue exitoso pero hubo un error al crear la publicación. Contacta a soporte.');
+    } catch (error: any) {
+      console.error('❌ Error procesando pago exitoso:', error);
+      console.error('❌ Error message:', error?.message);
+      console.error('❌ Error stack:', error?.stack);
+      console.error('❌ Error response:', error?.response?.data);
+      
+      const errorMsg = error?.message || error?.response?.data?.message || 'Error desconocido';
+      Alert.alert(
+        'Error al Procesar Pago', 
+        `El pago fue exitoso pero hubo un error al crear la publicación.\n\nDetalle: ${errorMsg}\n\nContacta a soporte.`,
+        [{ text: 'OK' }]
+      );
       setPaymentStatus('success'); // Dejar en success para que el usuario vea que pagó, aunque falló el post-proceso
+      setLoading(false);
     }
   };
 
   const renderContent = () => {
-    if (loading) {
+    if (loading || paymentStatus === 'verifying') {
       return (
         <View style={styles.centerContainer}>
           <ActivityIndicator size="large" color="#4CAF50" />
-          <Text style={styles.loadingText}>Procesando...</Text>
+          <Text style={styles.loadingText}>
+            {paymentStatus === 'verifying' ? 'Verificando pago...' : 'Procesando...'}
+          </Text>
+          {retryCount > 0 && (
+            <Text style={styles.retryText}>Reintento {retryCount}/{MAX_RETRIES}</Text>
+          )}
+          {reconciliationNeeded && (
+            <>
+              <Text style={styles.warningText}>⚠️ Estamos verificando el estado de tu pago</Text>
+              <Text style={styles.infoText}>Por favor espera un momento...</Text>
+              <Button
+                variant="outline"
+                title="Volver"
+                onPress={() => {
+                  setReconciliationNeeded(false);
+                  setPaymentStatus('pending');
+                  router.back();
+                }}
+                style={{ marginTop: 20, width: 200 }}
+              />
+            </>
+          )}
         </View>
       );
     }
@@ -409,7 +826,7 @@ export default function PaymentGatewayScreen() {
                 // router.replace('/(tabs)/profile'); 
                 // O dashboard
                 router.dismissAll();
-                router.replace('/(tabs)/profile');
+                router.replace('/(tabs)');
             }}
             style={styles.homeButton}
           />
@@ -501,7 +918,7 @@ export default function PaymentGatewayScreen() {
   };
 
   return (
-    <Screen title="Pasarela de Pago" backgroundColor="#F5F5F5">
+    <Screen backgroundColor="#F5F5F5">
       {renderContent()}
 
       <Modal
@@ -699,5 +1116,22 @@ const styles = StyleSheet.create({
   webviewTitle: {
       fontSize: 16,
       fontWeight: 'bold',
-  }
+  },
+  retryText: {
+    marginTop: 8,
+    fontSize: 14,
+    color: '#FF9800',
+  },
+  warningText: {
+    marginTop: 8,
+    fontSize: 14,
+    color: '#F44336',
+    textAlign: 'center',
+  },
+  infoText: {
+    marginTop: 8,
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
+  },
 });

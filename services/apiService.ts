@@ -47,8 +47,13 @@ import { API_URL } from '../constants/Config';
       console.log(`📥 [API] Response status: ${response.status}`);
 
       if (!response.ok) {
-        if (response.status === 401) {
-          throw new Error('Unauthorized - Session expired');
+        if (response.status === 401 || response.status === 403) {
+          console.error('🚪 [API] Session expired - logging out');
+          // Importar router dinámicamente para evitar dependencias circulares
+          const { router } = await import('expo-router');
+          await authService.logout();
+          router.replace('/auth');
+          throw new Error('Sesión expirada. Por favor, inicia sesión nuevamente.');
         }
         const error = await response.json().catch(() => ({ message: 'Request failed' }));
         throw new Error(error.message || `HTTP ${response.status}`);

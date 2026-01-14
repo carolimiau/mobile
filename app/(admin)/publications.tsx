@@ -9,6 +9,8 @@ import {
   ActivityIndicator,
   Image,
   Alert,
+  Modal,
+  TextInput,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
@@ -41,6 +43,9 @@ export default function AdminPublications() {
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'active' | 'inactive' | 'blocked'>('all');
+  const [blockModalVisible, setBlockModalVisible] = useState(false);
+  const [blockReason, setBlockReason] = useState('');
+  const [selectedPublicationId, setSelectedPublicationId] = useState<string | null>(null);
   const PAGE_SIZE = 10;
 
   useEffect(() => {
@@ -96,6 +101,31 @@ export default function AdminPublications() {
   const loadMore = () => {
     if (!loadingMore && hasMore) {
       loadPublications(page + 1);
+    }
+  };
+
+  const handleBlockPress = (id: string) => {
+    setSelectedPublicationId(id);
+    setBlockReason('');
+    setBlockModalVisible(true);
+  };
+
+  const confirmBlock = async () => {
+    if (!selectedPublicationId || !blockReason.trim()) {
+      Alert.alert('Error', 'Debe ingresar una razón para bloquear.');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      await adminService.blockPublication(selectedPublicationId, blockReason);
+      Alert.alert('Éxito', 'Publicación bloqueada correctamente');
+      setBlockModalVisible(false);
+      loadPublications(1, true);
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'No se pudo bloquear la publicación');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -188,14 +218,24 @@ export default function AdminPublications() {
             onPress={() => handleToggleStatus(item.id, item.status)}
           >
             <Ionicons
-              name={item.status === 'active' || item.status === 'blocked' ? 'play' : 'play'}
+              name={item.status === 'active' ? 'pause' : 'play'}
               size={18}
               color="#FFF"
             />
             <Text style={styles.actionButtonText}>
-              {item.status === 'active' ? 'Desactivar' : item.status === 'blocked' ? 'Publicar' : 'Activar'}
+              {item.status === 'active' ? 'Desactivar' : item.status === 'blocked' ? 'Restaurar' : 'Activar'}
             </Text>
           </TouchableOpacity>
+
+          {item.status !== 'blocked' && (
+            <TouchableOpacity
+              style={[styles.actionButton, styles.blockButton]}
+              onPress={() => handleBlockPress(item.id)}
+            >
+              <Ionicons name="ban" size={18} color="#FFF" />
+              <Text style={styles.actionButtonText}>Bloquear</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </View>
     );
@@ -295,6 +335,41 @@ export default function AdminPublications() {
         onEndReachedThreshold={0.5}
         contentContainerStyle={styles.listContent}
       />
+
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={blockModalVisible}
+        onRequestClose={() => setBlockModalVisible(false)}
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Bloquear Publicación</Text>
+            <TextInput
+              style={styles.modalInput}
+              placeholder="Ingrese la razón del bloqueo..."
+              multiline
+              numberOfLines={4}
+              value={blockReason}
+              onChangeText={setBlockReason}
+            />
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.cancelButton]}
+                onPress={() => setBlockModalVisible(false)}
+              >
+                <Text style={styles.modalButtonText}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.confirmButton]}
+                onPress={confirmBlock}
+              >
+                <Text style={styles.modalButtonText}>Confirmar</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </Screen>
   );
 }
@@ -485,5 +560,57 @@ const styles = StyleSheet.create({
     marginTop: 12,
     fontSize: 16,
     color: '#999',
+  },
+  blockButton: {
+    backgroundColor: '#F44336',
+  },
+  modalContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.5)',
+  },
+  modalContent: {
+    width: '90%',
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 20,
+    elevation: 5,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 12,
+    color: '#333',
+  },
+  modalInput: {
+    borderWidth: 1,
+    borderColor: '#CCC',
+    borderRadius: 8,
+    padding: 12,
+    height: 100,
+    textAlignVertical: 'top',
+    marginBottom: 16,
+    fontSize: 14,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 12,
+  },
+  modalButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  cancelButton: {
+    backgroundColor: '#999',
+  },
+  confirmButton: {
+    backgroundColor: '#F44336',
+  },
+  modalButtonText: {
+    color: 'white',
+    fontWeight: 'bold',
   },
 });

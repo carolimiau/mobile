@@ -1,8 +1,9 @@
-import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Inspection } from '../types';
 import { Card } from './ui/Card';
+import { downloadInspectionPdf } from '../services/pdfService';
 
 interface InspectionCardProps {
   inspection: Inspection;
@@ -10,6 +11,8 @@ interface InspectionCardProps {
 }
 
 export const InspectionCard: React.FC<InspectionCardProps> = ({ inspection, onPress }) => {
+  const [downloading, setDownloading] = useState(false);
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'Pendiente': return '#FF9800';
@@ -113,6 +116,32 @@ export const InspectionCard: React.FC<InspectionCardProps> = ({ inspection, onPr
         <Ionicons name="location" size={18} color="#666" />
         <Text style={styles.infoText}>{locationName}</Text>
       </View>
+
+      {inspection.estado_insp === 'Finalizada' && (
+        <TouchableOpacity 
+          style={styles.downloadButton} 
+          onPress={async () => {
+            try {
+              setDownloading(true);
+              await downloadInspectionPdf(inspection);
+            } catch (error) {
+              Alert.alert('Error', 'No se pudo generar el PDF');
+            } finally {
+              setDownloading(false);
+            }
+          }}
+          disabled={downloading}
+        >
+          {downloading ? (
+            <ActivityIndicator size="small" color="#FFF" />
+          ) : (
+            <>
+              <Ionicons name="document-text-outline" size={18} color="#FFF" />
+              <Text style={styles.downloadButtonText}>Descargar Informe PDF</Text>
+            </>
+          )}
+        </TouchableOpacity>
+      )}
     </Card>
   );
 };
@@ -121,6 +150,21 @@ const styles = StyleSheet.create({
   card: {
     marginBottom: 16,
     padding: 16,
+  },
+  downloadButton: {
+    backgroundColor: '#FF5722',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 10,
+    borderRadius: 8,
+    marginTop: 12,
+  },
+  downloadButtonText: {
+    color: '#FFF',
+    fontWeight: 'bold',
+    marginLeft: 8,
+    fontSize: 14,
   },
   header: {
     flexDirection: 'row',

@@ -235,26 +235,7 @@ class AuthService {
     }
   }
 
-  async forgotPassword(email: string): Promise<void> {
-    try {
-      const response = await fetch(`${API_URL}/auth/forgot-password`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ email }),
-      });
 
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result.message || 'Error al solicitar recuperación de contraseña');
-      }
-    } catch (error) {
-      console.error('Forgot Password error:', error);
-      throw error;
-    }
-  }
 
   async logout(): Promise<void> {
     try {

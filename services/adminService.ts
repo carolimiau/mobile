@@ -857,6 +857,27 @@ class AdminService {
     }
   }
 
+  async blockPublication(publicationId: string, reason: string): Promise<void> {
+    try {
+      const headers = await this.getHeaders();
+      const response = await fetch(`${API_URL}/publications/${publicationId}/block`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ reason }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || 'Error al bloquear la publicación');
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('Error blockPublication:', error);
+      throw error;
+    }
+  }
+
   async deletePublication(publicationId: string): Promise<void> {
     try {
       // Change deletion semantics: mark publication as blocked

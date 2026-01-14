@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, Image, Dimensions, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Image, Dimensions, TouchableOpacity, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
@@ -28,16 +28,18 @@ export default function VehicleDetailScreen() {
 
   const narrationText = useMemo(() => {
     if (!vehicle) return '';
+    // Cast to any to avoid TS errors with fallback properties not in interface
+    const v = vehicle as any;
     const normalized = {
-      brand: vehicle.marca || vehicle.brand,
-      model: vehicle.modelo || vehicle.model,
-      year: vehicle.anio || vehicle.year,
-      kilometers: vehicle.kilometraje ?? vehicle.kilometers,
-      transmission: vehicle.transmision || vehicle.transmission,
-      fuelType: vehicle.combustible || vehicle.tipoCombustible || vehicle.fuelType,
-      price: vehicle.valor ?? vehicle.price,
-      description: vehicle.descripcion || vehicle.description,
-      observations: vehicle.observacion || vehicle.observations,
+      brand: v.marca || v.brand,
+      model: v.modelo || v.model,
+      year: v.anio || v.year,
+      kilometers: v.kilometraje ?? v.kilometers,
+      transmission: v.transmision || v.transmission,
+      fuelType: v.combustible || v.tipoCombustible || v.fuelType,
+      price: v.valor ?? v.price,
+      description: v.descripcion || v.description,
+      observations: v.observacion || v.observations,
     };
     return ttsService.generateVehicleNarration(normalized);
   }, [vehicle]);
@@ -66,6 +68,15 @@ export default function VehicleDetailScreen() {
       setMuted(true);
       ttsService.stop();
     }
+  };
+
+  const handleRefundRequest = () => {
+    router.push({
+      pathname: '/request-refund',
+      params: { 
+        publicationId: vehicle.publicationId || vehicle.id 
+      }
+    });
   };
 
   if (loading || !vehicle) {
@@ -109,6 +120,13 @@ export default function VehicleDetailScreen() {
         </View>
 
         <View style={styles.content}>
+          {(vehicle.estado === 'blocked' || vehicle.status === 'blocked') && (
+            <View style={styles.blockedBanner}>
+              <Ionicons name="alert-circle" size={24} color="#FFF" style={{ marginRight: 8 }} />
+              <Text style={styles.blockedText}>Publicación bloqueada. Contáctenos o solicite reembolso.</Text>
+            </View>
+          )}
+
           <View style={styles.header}>
             <Text style={styles.title}>{vehicle.marca} {vehicle.modelo}</Text>
             <View style={styles.infoRow}>
@@ -142,6 +160,30 @@ export default function VehicleDetailScreen() {
 
       <View style={styles.footer}>
         {isOwner ? (
+          (vehicle.estado === 'blocked' || vehicle.status === 'blocked') ? (
+            <>
+              <Button 
+                title="Solicitar Reembolso" 
+                variant="outline"
+                style={{ marginBottom: 12, borderColor: '#FF9800', backgroundColor: '#FFF3E0' }}
+                textStyle={{ color: '#F57C00' }}
+                onPress={handleRefundRequest}
+              />
+              <Button 
+                title="Editar Publicación" 
+                variant="outline"
+                onPress={() => {
+                  router.push({
+                    pathname: '/edit-publication',
+                    params: { 
+                      vehicleId: vehicle.id,
+                      publicationId: vehicle.publicationId
+                    }
+                  });
+                }} 
+              />
+            </>
+          ) : (
           <>
             <Button 
               title="Editar Publicación" 
@@ -165,6 +207,7 @@ export default function VehicleDetailScreen() {
               textStyle={{ color: '#F44336' }}
             />
           </>
+          )
         ) : (
           <>
             <Button 
@@ -284,6 +327,20 @@ const styles = StyleSheet.create({
   },
   iconBtnUnmuted: {
     opacity: 1,
+  },
+  blockedBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F44336',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 16,
+  },
+  blockedText: {
+    color: '#FFF',
+    fontSize: 14,
+    fontWeight: 'bold',
+    flex: 1,
   },
   content: {
     padding: 24,

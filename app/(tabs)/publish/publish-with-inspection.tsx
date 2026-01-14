@@ -300,9 +300,16 @@ export default function PublishWithInspectionScreen() {
 
       <Select
         label="Horario"
-        value={formData.inspectionTime}
-        onChange={(value) => updateFormData('inspectionTime', value)}
-        options={availableTimeSlots.map(t => ({ label: t, value: t }))}
+        value={formData.horarioId ? String(formData.horarioId) : ''}
+        onChange={(value) => {
+          // value es el ID del horario (String)
+          const selectedSlot = availableTimeSlots.find(t => String(t.id) === value);
+          if (selectedSlot) {
+            updateFormData('inspectionTime', selectedSlot.time);
+            updateFormData('horarioId', selectedSlot.id);
+          }
+        }}
+        options={availableTimeSlots.map(t => ({ label: t.time, value: String(t.id) }))}
         disabled={loadingSlots || availableTimeSlots.length === 0}
         placeholder={loadingSlots ? "Cargando horarios..." : "Selecciona horario"}
       />
@@ -310,16 +317,16 @@ export default function PublishWithInspectionScreen() {
       <View style={styles.summaryContainer}>
         <Text style={styles.summaryTitle}>Resumen de Pago</Text>
         <View style={styles.summaryRow}>
-          <Text>Publicación</Text>
-          <Text>${publicationPrice.toLocaleString()}</Text>
+          <Text style={styles.summaryText}>Publicación</Text>
+          <Text style={styles.summaryText}>${publicationPrice.toLocaleString('es-CL')}</Text>
         </View>
         <View style={styles.summaryRow}>
-          <Text>Inspección</Text>
-          <Text>${inspectionPrice.toLocaleString()}</Text>
+          <Text style={styles.summaryText}>Inspección</Text>
+          <Text style={styles.summaryText}>${inspectionPrice.toLocaleString('es-CL')}</Text>
         </View>
         <View style={[styles.summaryRow, styles.totalRow]}>
           <Text style={styles.totalText}>Total</Text>
-          <Text style={styles.totalText}>${(publicationPrice + inspectionPrice).toLocaleString()}</Text>
+          <Text style={styles.totalText}>${(Number(publicationPrice) + Number(inspectionPrice)).toLocaleString('es-CL')}</Text>
         </View>
       </View>
     </View>
@@ -463,6 +470,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginBottom: 8,
+  },
+  summaryText: {
+    fontSize: 15,
+    color: '#333',
   },
   totalRow: {
     marginTop: 8,

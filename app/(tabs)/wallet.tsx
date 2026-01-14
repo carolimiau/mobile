@@ -7,6 +7,18 @@ import walletService from '../../services/walletService';
 import { WebView } from 'react-native-webview';
 import { router } from 'expo-router';
 
+// Configuración de reintentos y timeouts
+const MAX_RETRIES = 3;
+const RETRY_DELAY_MS = 2000;
+const TIMEOUT_MS = 30000;
+
+interface PaymentError {
+  code: string;
+  message: string;
+  retryable: boolean;
+  userMessage: string;
+}
+
 export default function WalletScreen() {
   const { balance, transactions, loading, refresh, addFunds } = useWallet();
   const [modalVisible, setModalVisible] = useState(false);
@@ -14,35 +26,185 @@ export default function WalletScreen() {
   const [processing, setProcessing] = useState(false);
   const [webviewVisible, setWebviewVisible] = useState(false);
   const [webviewUrl, setWebviewUrl] = useState<string | null>(null);
-  const [depositStatus, setDepositStatus] = useState<'idle' | 'success' | 'failure'>('idle');
+  const [depositStatus, setDepositStatus] = useState<'idle' | 'success' | 'failure' | 'verifying'>('idle');
+  const [retryCount, setRetryCount] = useState(0);
+  const [errorDetails, setErrorDetails] = useState<PaymentError | null>(null);
+
+  // Logging detallado
+  const logWalletEvent = (event: string, data?: any, level: 'info' | 'warn' | 'error' = 'info') => {
+    const timestamp = new Date().toISOString();
+    const logEntry = { timestamp, event, data, balance, retryCount };
+    
+    const prefix = level === 'error' ? '❌' : level === 'warn' ? '⚠️' : '✅';
+    console.log(`${prefix} [Wallet] ${event}:`, logEntry);
+  };
+
+  // Reintentos con backoff exponencial
+  const executeWithRetry = async <T,>(
+    fn: () => Promise<T>,
+    operation: string,
+    currentRetry = 0
+  ): Promise<T> => {
+    try {
+      const timeoutPromise = new Promise<never>((_, reject) => 
+        setTimeout(() => reject(new Error('TIMEOUT')), TIMEOUT_MS)
+      );
+      
+      const result = await Promise.race([fn(), timeoutPromise]);
+      
+      if (currentRetry > 0) {
+        logWalletEvent(`${operation} succeeded after ${currentRetry} retries`);
+      }
+      
+      return result;
+    } catch (error: any) {
+      const errorCode = error?.code || error?.message || 'UNKNOWN';
+      const isNetworkError = ['TIMEOUT', 'ECONNREFUSED', 'ENOTFOUND', 'ETIMEDOUT', 'Network request failed'].some(
+        code => errorCode.includes(code)
+      );
+      
+      logWalletEvent(`${operation} failed`, { error: errorCode, retry: currentRetry }, 'error');
+
+      if (isNetworkError && currentRetry < MAX_RETRIES) {
+        const delay = RETRY_DELAY_MS * Math.pow(2, currentRetry);
+        logWalletEvent(`Retrying ${operation} in ${delay}ms`, { attempt: currentRetry + 1 }, 'warn');
+        
+        await new Promise(resolve => setTimeout(resolve, delay));
+        setRetryCount(currentRetry + 1);
+        return executeWithRetry(fn, operation, currentRetry + 1);
+      }
+      
+      throw error;
+    }
+  };
+
+  // Categorizar errores
+  const categorizeError = (error: any): PaymentError => {
+    const errorMsg = error?.message || error?.toString() || 'Error desconocido';
+    const errorCode = error?.code || error?.response?.status?.toString() || 'UNKNOWN';
+
+    if (['TIMEOUT', 'ECONNREFUSED', 'ENOTFOUND', 'ETIMEDOUT'].some(code => errorMsg.includes(code))) {
+      return {
+        code: 'NETWORK_ERROR',
+        message: errorMsg,
+        retryable: true,
+        userMessage: 'Problemas de conexión. Estamos verificando el estado de tu depósito...'
+      };
+    }
+
+    if (['401', '403'].includes(errorCode)) {
+      return {
+        code: 'AUTH_ERROR',
+        message: errorMsg,
+        retryable: false,
+        userMessage: 'Error de autenticación. Por favor, inicia sesión nuevamente.'
+      };
+    }
+
+    if (errorCode === '400') {
+      return {
+        code: 'VALIDATION_ERROR',
+        message: errorMsg,
+        retryable: false,
+        userMessage: 'Datos inválidos. Verifica el monto e intenta nuevamente.'
+      };
+    }
+
+    if (errorCode === '503') {
+      return {
+        code: 'SERVICE_UNAVAILABLE',
+        message: errorMsg,
+        retryable: true,
+        userMessage: 'Servicio temporalmente no disponible. Intenta en unos minutos.'
+      };
+    }
+
+    return {
+      code: 'UNKNOWN_ERROR',
+      message: errorMsg,
+      retryable: false,
+      userMessage: 'Ocurrió un error inesperado. Contacta a soporte si persiste.'
+    };
+  };
 
   const handleDeposit = async () => {
-    if (!amount || isNaN(Number(amount)) || Number(amount) <= 0) {
+    const amountNum = Number(amount);
+    
+    // Validaciones previas
+    if (!amount || isNaN(amountNum) || amountNum <= 0) {
+      logWalletEvent('Invalid deposit amount', { amount }, 'error');
       Alert.alert('Error', 'Por favor ingresa un monto válido');
       return;
     }
 
-    setProcessing(true);
-    try {
-      const res = await addFunds(Number(amount));
-      const url = res?.url || res?.redirectUrl || null;
-      if (!url) throw new Error('No se recibió URL de pago');
+    if (amountNum < 1000) {
+      logWalletEvent('Amount below minimum', { amount: amountNum }, 'warn');
+      Alert.alert('Monto Muy Bajo', 'El monto mínimo de carga es $1.000');
+      return;
+    }
 
+    if (amountNum > 5000000) {
+      logWalletEvent('Amount exceeds maximum', { amount: amountNum }, 'warn');
+      Alert.alert('Monto Muy Alto', 'El monto máximo de carga es $5.000.000');
+      return;
+    }
+
+    setProcessing(true);
+    setErrorDetails(null);
+    logWalletEvent('Deposit initiated', { amount: amountNum });
+    
+    try {
+      const res = await executeWithRetry(
+        () => addFunds(amountNum),
+        'add_funds'
+      );
+      
+      const url = res?.url || res?.redirectUrl || null;
+      
+      if (!url) {
+        logWalletEvent('No payment URL received', { response: res }, 'error');
+        throw new Error('No se recibió URL de pago');
+      }
+
+      logWalletEvent('Payment URL received', { hasUrl: true });
       setModalVisible(false);
       setWebviewUrl(url);
       setWebviewVisible(true);
     } catch (error: any) {
-      console.error('Error en depósito:', error);
-      Alert.alert('Error', error?.message || 'Ocurrió un error al procesar la solicitud');
+      logWalletEvent('Deposit failed', { error: error?.message }, 'error');
+      
+      const errorCategory = categorizeError(error);
+      setErrorDetails(errorCategory);
+      
+      if (errorCategory.retryable && retryCount < MAX_RETRIES) {
+        Alert.alert(
+          'Error Temporal',
+          errorCategory.userMessage + ' ¿Deseas reintentar?',
+          [
+            { text: 'Cancelar', style: 'cancel', onPress: () => setProcessing(false) },
+            { text: 'Reintentar', onPress: () => {
+              setRetryCount(retryCount + 1);
+              setTimeout(() => handleDeposit(), 1000);
+            }}
+          ]
+        );
+      } else {
+        Alert.alert('Error', errorCategory.userMessage);
+        setProcessing(false);
+      }
     } finally {
-      setProcessing(false);
-      setAmount('');
+      if (!errorDetails || !errorDetails.retryable) {
+        setAmount('');
+        setProcessing(false);
+      }
     }
   };
 
   const handleWebviewNavigation = async (navState: any) => {
     const url: string = navState?.url || '';
     if (!url) return;
+
+    logWalletEvent('WebView navigation', { url: url.substring(0, 50) + '...' });
 
     try {
       let token: string | null = null;
@@ -55,8 +217,20 @@ export default function WalletScreen() {
       }
 
       if (token) {
+        logWalletEvent('Token found, confirming deposit', { tokenPrefix: token.substring(0, 10) + '...' });
+        setDepositStatus('verifying');
+        
         try {
-          const res = await walletService.confirmTransbankDeposit(token);
+          const res = await executeWithRetry(
+            () => walletService.confirmTransbankDeposit(token),
+            'confirm_deposit'
+          );
+          
+          logWalletEvent('Deposit confirmation response', { 
+            success: res?.success,
+            status: res?.data?.status || res?.status 
+          });
+          
           setWebviewVisible(false);
           setWebviewUrl(null);
 
@@ -67,24 +241,44 @@ export default function WalletScreen() {
             || res?.status === 'AUTHORIZED';
 
           if (isAuthorized) {
+            logWalletEvent('Deposit authorized', {});
             setDepositStatus('success');
-            // refresh will be called when user accepts the success screen
-          } else {
+          } else if (res?.transaction?.response_code && res.transaction.response_code > 0) {
+            // Rechazo explícito
+            logWalletEvent('Deposit rejected', { code: res.transaction.response_code }, 'warn');
             setDepositStatus('failure');
-            Alert.alert('Error', 'No se pudo confirmar el depósito.');
+            Alert.alert('Pago Rechazado', 'Tu depósito fue rechazado por el banco.');
+          } else {
+            // Estado ambiguo
+            logWalletEvent('Ambiguous deposit state', { response: res }, 'warn');
+            setDepositStatus('idle');
+            Alert.alert(
+              'Verificando Depósito',
+              'Estamos verificando tu depósito. Revisa tu saldo en unos minutos.',
+              [{ text: 'OK' }]
+            );
           }
-        } catch (e) {
-          console.error('Error confirmando depósito:', e);
+        } catch (e: any) {
+          logWalletEvent('Error confirming deposit', { error: e?.message }, 'error');
+          
+          const errorCategory = categorizeError(e);
           setWebviewVisible(false);
-          setDepositStatus('failure');
-          Alert.alert('Error', 'No se pudo confirmar el depósito.');
+          setDepositStatus('idle');
+          
+          Alert.alert(
+            'Verificando Depósito',
+            errorCategory.userMessage + ' Revisa tu saldo para confirmar.',
+            [{ text: 'OK' }]
+          );
         }
       } else if (url.includes('cancel') || url.includes('anulado')) {
+        logWalletEvent('Deposit cancelled by user', {}, 'warn');
         setWebviewVisible(false);
+        setDepositStatus('idle');
         Alert.alert('Pago Anulado', 'La carga fue cancelada.');
       }
     } catch (e) {
-      console.warn('Error parsing WebView URL:', e);
+      logWalletEvent('Error parsing WebView URL', { error: e }, 'error');
     }
   };
 
@@ -97,10 +291,31 @@ export default function WalletScreen() {
           <Text style={styles.successMessage}>Tu saldo ha sido actualizado correctamente.</Text>
           <TouchableOpacity
             style={styles.successButton}
-            onPress={() => { setDepositStatus('idle'); refresh(); }}
+            onPress={() => { 
+              logWalletEvent('Deposit success acknowledged');
+              setDepositStatus('idle'); 
+              setRetryCount(0);
+              setErrorDetails(null);
+              refresh(); 
+            }}
           >
             <Text style={styles.successButtonText}>Aceptar</Text>
           </TouchableOpacity>
+        </View>
+      </Screen>
+    );
+  }
+
+  if (depositStatus === 'verifying') {
+    return (
+      <Screen backgroundColor="#FFF">
+        <View style={styles.successContainer}>
+          <ActivityIndicator size="large" color="#4CAF50" />
+          <Text style={styles.successTitle}>Verificando Depósito</Text>
+          <Text style={styles.successMessage}>Estamos confirmando tu pago...</Text>
+          {retryCount > 0 && (
+            <Text style={styles.retryText}>Reintento {retryCount}/{MAX_RETRIES}</Text>
+          )}
         </View>
       </Screen>
     );
@@ -264,5 +479,10 @@ const styles = StyleSheet.create({
   successMessage: { fontSize: 14, color: '#666', marginTop: 8, textAlign: 'center' },
   successButton: { marginTop: 24, backgroundColor: '#4CAF50', paddingVertical: 12, paddingHorizontal: 28, borderRadius: 8 },
   successButtonText: { color: '#FFF', fontWeight: '700' },
+  retryText: {
+    marginTop: 8,
+    fontSize: 14,
+    color: '#FF9800',
+  },
 });
 

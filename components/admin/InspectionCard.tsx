@@ -8,8 +8,9 @@ import { Button } from '../ui/Button';
 interface InspectionCardProps {
   inspection: AdminInspection;
   onPress: () => void;
-  onAssignPress: () => void;
+  onAssignPress?: () => void;
   onViewResult?: () => void;
+  showMechanic?: boolean;
   style?: any;
 }
 
@@ -18,6 +19,7 @@ export const InspectionCard: React.FC<InspectionCardProps> = ({
   onPress,
   onAssignPress,
   onViewResult,
+  showMechanic = true,
   style,
 }) => {
   const getStatusColor = (status: string) => {
@@ -89,23 +91,25 @@ export const InspectionCard: React.FC<InspectionCardProps> = ({
         </View>
       </View>
 
-      <View style={styles.mechanicContainer}>
-        <Text style={styles.mechanicLabel}>Mecánico asignado:</Text>
-        {inspection.mechanicName ? (
-          <View style={styles.mechanicInfo}>
-            {inspection.mechanicPhoto ? (
-              <Image source={{ uri: inspection.mechanicPhoto }} style={styles.mechanicPhoto} />
-            ) : (
-              <View style={styles.mechanicPhotoPlaceholder}>
-                <Ionicons name="person" size={20} color="#999" />
-              </View>
-            )}
-            <Text style={styles.mechanicName}>{inspection.mechanicName}</Text>
-          </View>
-        ) : (
-          <Text style={styles.noMechanic}>Sin asignar</Text>
-        )}
-      </View>
+      {showMechanic && (
+        <View style={styles.mechanicContainer}>
+          <Text style={styles.mechanicLabel}>Mecánico asignado:</Text>
+          {inspection.mechanicName ? (
+            <View style={styles.mechanicInfo}>
+              {inspection.mechanicPhoto ? (
+                <Image source={{ uri: inspection.mechanicPhoto }} style={styles.mechanicPhoto} />
+              ) : (
+                <View style={styles.mechanicPhotoPlaceholder}>
+                  <Ionicons name="person" size={20} color="#999" />
+                </View>
+              )}
+              <Text style={styles.mechanicName}>{inspection.mechanicName}</Text>
+            </View>
+          ) : (
+            <Text style={styles.noMechanic}>Sin asignar</Text>
+          )}
+        </View>
+      )}
 
       <View style={styles.actions}>
         {(inspection.status === 'completed' || inspection.status === 'Finalizada') && onViewResult && (
@@ -121,7 +125,7 @@ export const InspectionCard: React.FC<InspectionCardProps> = ({
             icon={<Ionicons name="clipboard-outline" size={16} color="#4CAF50" />}
           />
         )}
-        {!inspection.mechanicId && inspection.status !== 'cancelled' && (
+        {!inspection.mechanicId && inspection.status !== 'cancelled' && onAssignPress && (
           <Button
             title="Asignar Mecánico"
             onPress={onAssignPress}

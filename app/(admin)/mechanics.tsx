@@ -31,7 +31,7 @@ export default function AdminMechanicsScreen() {
   // Payment states
   const [showPayModal, setShowPayModal] = useState(false);
   const [selectedMechanic, setSelectedMechanic] = useState<Mechanic | null>(null);
-  const [debtData, setDebtData] = useState<{totalDebt: number, inspections: any[]} | null>(null);
+  const [debtData, setDebtData] = useState<{totalDebt: number, count: number, inspections: any[]} | null>(null);
   const [receiptImage, setReceiptImage] = useState<string | null>(null);
   const [uploadingPayment, setUploadingPayment] = useState(false);
 

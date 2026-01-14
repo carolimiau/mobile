@@ -14,7 +14,7 @@ class SocketService {
    */
   async connect(): Promise<void> {
     if (this.socket?.connected) {
-      console.log('Socket ya está conectado');
+      console.log('✅ Socket ya está conectado');
       return;
     }
 
@@ -92,13 +92,63 @@ class SocketService {
       console.error('❌ Error de conexión:', error.message);
     });
 
-    this.socket.on('reconnect', (attemptNumber) => {
-      this.isConnected = true;
-      console.log(`🔄 WebSocket reconectado después de ${attemptNumber} intentos`);
+    // Manejar errores de autenticación
+    this.socket.on('auth_error', async (data: { code: string; message: string; attemptsRemaining?: number }) => {
+      console.error('🔐 Error de autenticación WebSocket:', data);
+      
+      // Si el código indica que se excedieron los intentos o el token es inválido de forma permanente
+      if (data.code === 'MAX_ATTEMPTS_EXCEEDED' || data.code === 'INVALID_TOKEN' || data.code === 'NO_TOKEN') {
+        console.error('❌ Error crítico de autenticación - cerrando sesión');
+        const authService = (await import('./authService')).default;
+        const { router } = await import('expo-router');
+        await authService.logout();
+        this.disconnect();
+        router.replace('/auth');
+        return;
+      }
+      
+      if (data.code === 'TOKEN_EXPIRED') {
+        console.log('⏰ Token expirado, intentando renovar...');
+        // Solo intentar renovar si quedan intentos
+        if (!data.attemptsRemaining || data.attemptsRemaining > 0) {
+          await this.refreshAuthToken();
+        } else {
+          console.error('❌ No quedan intentos de renovación - cerrando sesión');
+          const authService = (await import('./authService')).default;
+          const { router } = await import('expo-router');
+          await authService.logout();
+          this.disconnect();
+          router.replace('/auth');
+        }
+      }
     });
 
-    this.socket.on('reconnect_attempt', (attemptNumber) => {
+    // Confirmación de autenticación exitosa
+    this.socket.on('authenticated', (data: { userId: string }) => {
+      console.log('✅ Autenticación exitosa para usuario:', data.userId);
+    });
+
+    this.socket.on('reconnect', async (attemptNumber) => {
+      this.isConnected = true;
+      console.log(`🔄 WebSocket reconectado después de ${attemptNumber} intentos`);
+      
+      // Renovar token después de reconexión
+      await this.refreshAuthToken();
+    });
+
+    this.socket.on('reconnect_attempt', async (attemptNumber) => {
       console.log(`🔄 Intento de reconexión #${attemptNumber}`);
+      
+      // Intentar obtener un nuevo token antes de reconectar
+      try {
+        const newToken = await authService.getToken();
+        if (newToken && this.socket) {
+          // Actualizar token de autenticación
+          this.socket.auth = { token: newToken };
+        }
+      } catch (error) {
+        console.warn('⚠️ No se pudo obtener nuevo token para reconexión');
+      }
     });
 
     this.socket.on('reconnect_error', (error) => {
@@ -107,6 +157,7 @@ class SocketService {
 
     this.socket.on('reconnect_failed', () => {
       console.error('❌ Reconexión fallida después de todos los intentos');
+      this.emit('reconnect_failed', {});
     });
 
     // Escuchar nuevos mensajes
@@ -195,6 +246,51 @@ class SocketService {
         { type: 'notification', ...data }
       );
     });
+
+    // Confirmación de autenticación exitosa
+    this.socket.on('authenticated', (data: { userId: string }) => {
+      console.log('✅ Autenticación exitosa para usuario:', data.userId);
+    });
+  }
+
+  /**
+   * Renovar token de autenticación sin desconectar
+   */
+  private async refreshAuthToken(): Promise<void> {
+    try {
+      const newToken = await authService.getToken();
+      
+      if (!newToken) {
+        console.error('❌ No se pudo obtener nuevo token');
+        this.emit('auth_required', { code: 'NO_TOKEN' });
+        return;
+      }
+
+      if (!this.socket?.connected) {
+        console.log('⚠️ Socket no conectado, no se puede renovar token');
+        return;
+      }
+
+      console.log('🔄 Enviando nuevo token al servidor...');
+      
+      // Emitir evento para actualizar autenticación
+      this.socket.emit('refresh_auth', { token: newToken });
+      
+      // También actualizar el auth del socket para futuras reconexiones
+      this.socket.auth = { token: newToken };
+      
+      console.log('✅ Token renovado exitosamente');
+    } catch (error) {
+      console.error('❌ Error renovando token:', error);
+      this.emit('auth_required', { code: 'TOKEN_REFRESH_FAILED' });
+    }
+  }
+
+  /**
+   * Renovar token manualmente (método público)
+   */
+  async refreshToken(): Promise<void> {
+    return this.refreshAuthToken();
   }
 
   /**
