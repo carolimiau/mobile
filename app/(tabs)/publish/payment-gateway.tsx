@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, Alert, Linking, AppState, Platform, TouchableOpacity, Modal, SafeAreaView, useWindowDimensions, StatusBar, BackHandler } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -8,6 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { WebView } from 'react-native-webview';
 import apiService from '../../../services/apiService';
 import authService from '../../../services/authService';
+import walletService from '../../../services/walletService';
 import { useWallet } from '../../../hooks/useWallet';
 import { API_URL, LOCAL_IP } from '../../../constants/Config';
 
@@ -34,10 +35,22 @@ export default function PaymentGatewayScreen() {
   const [prices, setPrices] = useState<{ nombre: string; precio: number }[]>([]);
   const [webviewVisible, setWebviewVisible] = useState(false);
   const [webviewUrl, setWebviewUrl] = useState<string | null>(null);
+  const [webviewHtml, setWebviewHtml] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState(0);
   const [errorDetails, setErrorDetails] = useState<PaymentError | null>(null);
   const [reconciliationNeeded, setReconciliationNeeded] = useState(false);
   const [isConfirming, setIsConfirming] = useState(false);
+  const [pollingAttempts, setPollingAttempts] = useState(0);
+  const isCancelledRef = useRef(false);
+
+  // Debug: Log cambios en webviewVisible y webviewUrl
+  useEffect(() => {
+    console.log('🔵 [State] webviewVisible cambió a:', webviewVisible);
+  }, [webviewVisible]);
+
+  useEffect(() => {
+    console.log('🔵 [State] webviewUrl cambió a:', webviewUrl);
+  }, [webviewUrl]);
 
   const { width, height } = useWindowDimensions();
   const isLandscape = width > height;
@@ -72,6 +85,43 @@ export default function PaymentGatewayScreen() {
     const subscription = AppState.addEventListener('change', handleAppStateChange);
     return () => subscription.remove();
   }, [isWaitingForPayment]);
+
+  // Polling automático para verificar pagos pendientes
+  useEffect(() => {
+    let pollingInterval: any = null;
+    
+    if (reconciliationNeeded && paymentStatus === 'verifying' && !isConfirming) {
+      console.log('🔄 [Polling] Iniciando polling automático de verificación de pago');
+      
+      // Verificar inmediatamente
+      checkPendingPayment();
+      
+      // Luego verificar cada 3 segundos
+      pollingInterval = setInterval(async () => {
+        if (pollingAttempts < 20) { // Máximo 20 intentos (1 minuto)
+          console.log(`🔄 [Polling] Intento ${pollingAttempts + 1}/20`);
+          setPollingAttempts(prev => prev + 1);
+          await checkPendingPayment();
+        } else {
+          console.log('⏹️ [Polling] Máximo de intentos alcanzado');
+          setReconciliationNeeded(false);
+          Alert.alert(
+            'Verificación Pendiente',
+            'No pudimos confirmar automáticamente tu pago. Por favor, verifica tu saldo o contacta a soporte si realizaste el pago.',
+            [{ text: 'OK' }]
+          );
+          if (pollingInterval) clearInterval(pollingInterval);
+        }
+      }, 3000); // Cada 3 segundos
+    }
+    
+    return () => {
+      if (pollingInterval) {
+        console.log('🛑 [Polling] Deteniendo polling');
+        clearInterval(pollingInterval);
+      }
+    };
+  }, [reconciliationNeeded, paymentStatus, isConfirming, pollingAttempts]);
 
   const loadPrices = async () => {
     try {
@@ -198,14 +248,17 @@ export default function PaymentGatewayScreen() {
   };
 
   const checkPendingPayment = async () => {
-    // Prevenir confirmaciones concurrentes
-    if (isConfirming) {
-      logPaymentEvent('Already confirming payment, skipping', {}, 'warn');
+    // Prevenir confirmaciones concurrentes o si fue cancelado
+    if (isConfirming || isCancelledRef.current) {
+      logPaymentEvent('Skipping payment check', { isConfirming, isCancelled: isCancelledRef.current }, 'warn');
       return;
     }
 
     try {
       setIsConfirming(true);
+      
+      if (isCancelledRef.current) return;
+      
       setLoading(true);
       setPaymentStatus('verifying');
       logPaymentEvent('Checking pending payment');
@@ -218,6 +271,121 @@ export default function PaymentGatewayScreen() {
         return;
       }
 
+      const serviceTypeStr = Array.isArray(serviceType) ? serviceType[0] : serviceType;
+      
+      // CASO ESPECIAL: WALLET DEPOSIT - usar endpoint diferente
+      if (serviceTypeStr === 'wallet_deposit') {
+        logPaymentEvent('Checking wallet deposit status');
+        
+        let isConfirmed = false;
+
+        // Intentar confirmar si tenemos el token guardado
+        if (savedPaymentId) {
+            try {
+                const token = await AsyncStorage.getItem(`payment_${savedPaymentId}_token`);
+                if (token) {
+                    console.log('🔵 [Wallet Check] Intentando confirmar con token:', token.substring(0, 10));
+                    const result = await walletService.confirmTransbankDeposit(token, savedPaymentId);
+                    console.log('✅ [Wallet Check] Resultado confirmación:', result);
+                    
+                    // Verificar estructura de respuesta (puede venir anidada en 'data' o directa)
+                    const status = result?.status || result?.data?.status;
+                    const responseCode = result?.response_code ?? result?.data?.response_code;
+                    const isSuccess = result?.success === true;
+
+                    if (isSuccess || status === 'AUTHORIZED' || responseCode === 0) {
+                        isConfirmed = true;
+                    }
+
+                    const isFailure = status === 'FAILED' || (responseCode !== undefined && responseCode !== 0);
+                    if (isFailure) {
+                        console.log('❌ [Wallet Check] Pago fallido/rechazado explícitamente');
+                        setReconciliationNeeded(false);
+                        setPaymentStatus('failure');
+                        setIsConfirming(false);
+                        setIsWaitingForPayment(false);
+                        setLoading(false); // Stop loading!
+                         // Limpiar token
+                        await AsyncStorage.removeItem('waitingForPayment');
+                        if (savedPaymentId) await AsyncStorage.removeItem(`payment_${savedPaymentId}_token`);
+                        return;
+                    }
+                } else {
+                    // Si no hay token, verificamos si el saldo cambió? O asumimos éxito si el usuario volvió?
+                    // Mejor verificar transacciones recientes
+                    console.log('⚠️ [Wallet Check] No hay token guardado, verificando transacciones recientes...');
+                    // await new Promise(resolve => setTimeout(resolve, 2000)); // Esperar propagación
+                }
+            } catch (e: any) {
+                console.warn('⚠️ [Wallet Check] Error confirmando:', e);
+                // Si el error es "ya confirmado" o similar, lo tomamos como éxito
+                if (e.message?.includes('ya fue confirmado') || e.message?.includes('processed')) {
+                    isConfirmed = true;
+                }
+            }
+        }
+        
+        // Refrescar saldo siempre
+        const oldBalance = balance;
+        await refreshWallet();
+        
+        // Si el saldo aumentó en el monto esperado, o si confirmamos explícitamente
+        // TODO: Comparar saldos para mayor seguridad
+        
+        if (isConfirmed) {
+            logPaymentEvent('Wallet deposit confirmed');
+            setPaymentStatus('success');
+            setIsWaitingForPayment(false);
+            setLoading(false);
+            await AsyncStorage.removeItem('waitingForPayment');
+            // Limpiar token
+            if (savedPaymentId) await AsyncStorage.removeItem(`payment_${savedPaymentId}_token`);
+        } else {
+             // Si no pudimos confirmar, mantenemos verificando o pedimos al usuario revisar
+             // Por ahora, para no bloquear, si no falló explícitamente, cancelamos la espera
+             // OJO: Esto puede ser arriesgado. Mejor dejar en estado "verifying" si falla confirmación?
+             // El usuario se quejaba de "loops". Si no podemos confirmar, asumimos que no pasó nada y volvemos?
+             
+             // Si estamos en este bloque, es porque checkPendingPayment fue llamado.
+             // Si fue llamado muy rápido (antes de pagar), esto daría falso positivo de fallo.
+             
+             console.log('⚠️ [Wallet Check] No se pudo confirmar el depósito. Manteniendo estado...');
+             // No cambiar estado a success si no estamos seguros
+             // Pero si el usuario volvió del navegador, probablemente terminó o canceló.
+             
+             // Si el webview NO está visible, y estamos aquí, probablemente el usuario canceló o terminó.
+             // Si webview está visible, este check NO debería correr (protegido por lógica).
+             
+             // Si llegamos aquí sin confirmación positiva, marcamos como cancelado/fallido para que intente de nuevo
+             // setPaymentStatus('failure'); // O 'verifying'?
+        }
+        
+        // HACK TEMPORAL: Como el backend maneja el callback, a veces el front no se entera
+        // Si el usuario cerró el webview manual, se llama markPaymentCancelled
+        // Si el webview redireccionó al app, se llama checkPendingPayment
+        
+        if (!isConfirmed) {
+            // Reintentar un par de veces?
+            if (pollingAttempts < 3) {
+                 console.log(`⚠️ [Wallet Check] Intento ${pollingAttempts + 1}/3 fallido. Reintentando...`);
+                 setPollingAttempts(prev => prev + 1);
+                 setReconciliationNeeded(true); // Activar polling
+                 setIsConfirming(false);
+                 return;
+            }
+            // Si después de 3 intentos no hay confirmación, asumir error
+            console.log('❌ [Wallet Check] No se pudo confirmar el depósito tras varios intentos.');
+            setReconciliationNeeded(false);
+            setPaymentStatus('failure');
+            setIsConfirming(false);
+            return;
+        } else {
+             setIsConfirming(false);
+             return;
+        }
+      }
+
+      // FLUJO NORMAL: Publicaciones e inspecciones
       // Verificar con reintentos
       const response = await executeWithRetry(
         () => apiService.get('/payments/webpay/check-pending'),
@@ -258,15 +426,40 @@ export default function PaymentGatewayScreen() {
           fullResult: result
         });
 
-        // El payment service devuelve la transacción directamente (no anidada)
-        const isAuthorized = result?.response_code === 0
-          || result?.status === 'AUTHORIZED';
+        // El payment service puede devolver diferentes formatos:
+        // 1. Confirmación exitosa: { response_code: 0, status: 'AUTHORIZED', ... }
+        // 2. Transacción anidada: { transaction: { response_code: 0 } }
+        // 3. Solo info de transacción: { token, url } (esto significa que no se confirmó aún)
+        
+        const responseCode = result?.response_code ?? result?.transaction?.response_code;
+        const status = result?.status ?? result?.transaction?.status;
+        const hasOnlyTokenUrl = result?.token && result?.url && !responseCode && !status;
+        
+        console.log('🔍 Response analysis:', {
+          hasResponseCode: !!responseCode,
+          responseCode,
+          hasStatus: !!status,
+          status,
+          hasOnlyTokenUrl,
+          fullResult: result
+        });
+        
+        // Si solo tiene token/url, significa que el pago aún no se confirmó
+        if (hasOnlyTokenUrl) {
+          logPaymentEvent('Payment not yet confirmed - waiting for user to complete', { result }, 'warn');
+          setReconciliationNeeded(true);
+          setPaymentStatus('verifying');
+          setLoading(false);
+          return;
+        }
 
-        console.log('🔍 isAuthorized:', isAuthorized, '| response_code:', result?.response_code, '| status:', result?.status);
+        const isAuthorized = responseCode === 0 || status === 'AUTHORIZED';
+
+        console.log('🔍 isAuthorized:', isAuthorized, '| response_code:', responseCode, '| status:', status);
 
         if (isAuthorized) {
-          logPaymentEvent('Payment authorized', { paymentId: savedPaymentId });
-          
+          logPaymentEvent('Payment authorized successfully');
+          setReconciliationNeeded(false);
           // Update state IMMEDIATELY to success
           setPaymentStatus('success');
           setIsWaitingForPayment(false);
@@ -284,21 +477,23 @@ export default function PaymentGatewayScreen() {
           } finally {
             setLoading(false);
           }
-        } else if (result?.transaction?.response_code && result.transaction.response_code > 0) {
+        } else if (responseCode && responseCode > 0) {
           // Rechazo explícito del banco
-          const responseCode = result.transaction.response_code;
           logPaymentEvent('Payment rejected by bank', { responseCode }, 'warn');
           
+          setReconciliationNeeded(false); // Detener polling
           setIsWaitingForPayment(false);
           await AsyncStorage.removeItem('waitingForPayment');
           
           // Marcar pago como fallido en backend
           await markPaymentCancelled(savedPaymentId, `Rechazado por el banco (código: ${responseCode})`);
           
+          setPaymentStatus('failure'); // Actualizar estado para UI
+          
           Alert.alert(
             'Pago Rechazado',
             'Tu pago fue rechazado por el banco. Verifica los datos de tu tarjeta e intenta nuevamente.',
-            [{ text: 'OK', onPress: () => setPaymentStatus('pending') }]
+            [{ text: 'OK' }]
           );
           setLoading(false);
         } else {
@@ -310,9 +505,9 @@ export default function PaymentGatewayScreen() {
           setLoading(false);
         }
       } else {
-        // No hay respuesta de WebPay - mantener verificando
-        logPaymentEvent('No pending payment response from backend', {}, 'warn');
+        logPaymentEvent('No pending payment response from backend - starting auto-polling', {}, 'warn');
         setReconciliationNeeded(true);
+        setPollingAttempts(0);
         setPaymentStatus('verifying');
         setLoading(false);
       }
@@ -348,6 +543,14 @@ export default function PaymentGatewayScreen() {
             logPaymentEvent('Could not verify payment status', { error: e }, 'error');
           }
         }
+      } else if (!errorCategory.retryable) {
+        // ERROR FATAL O NO RECUPERABLE (Ej: 400 Bad Request, transacción inválida)
+        // Detener polling inmediatamente
+        logPaymentEvent('Non-retryable error, cancelling payment check', { errorCategory }, 'warn');
+        markPaymentCancelled(undefined, errorCategory.message || 'Error no recuperable');
+        setLoading(false);
+        setIsConfirming(false);
+        return;
       }
       
       setReconciliationNeeded(true);
@@ -377,8 +580,105 @@ export default function PaymentGatewayScreen() {
 
     setLoading(true);
     setErrorDetails(null);
+    isCancelledRef.current = false;
 
     try {
+      const serviceTypeStr = Array.isArray(serviceType) ? serviceType[0] : serviceType;
+      
+      // CASO ESPECIAL: WALLET DEPOSIT (viene desde wallet.tsx o similar)
+      if (serviceTypeStr === 'wallet_deposit') {
+        logPaymentEvent('Wallet deposit WebPay flow initiated', { amount: amountNum });
+        
+        const user = await authService.getUser();
+        if (!user) {
+          logPaymentEvent('User not authenticated', {}, 'error');
+          throw new Error('Usuario no autenticado');
+        }
+
+        console.log('🔵 [Wallet Deposit] Iniciando depósito de wallet...');
+        
+        // FORZAR ESTADO INICIAL
+        setPaymentStatus('pending');
+        setWebviewVisible(false);
+
+        let depositResponse;
+        try {
+            // Iniciar depósito de wallet
+            depositResponse = await executeWithRetry(
+              () => walletService.initiateTransbankDeposit(amountNum),
+              'initiate_wallet_deposit'
+            );
+        } catch (initError: any) {
+            console.error('❌ [Wallet Deposit] Error en initiateTransbankDeposit:', initError);
+            // Mostrar error específico
+            throw new Error(initError.message || 'Error al conectar con el servicio de pagos');
+        }
+        
+        console.log('🔵 [Wallet Deposit] Respuesta del backend:', JSON.stringify(depositResponse, null, 2));
+        
+        const paymentId = depositResponse?.paymentId;
+        const webpayUrl = depositResponse?.url;
+        const token = depositResponse?.token;
+        
+        if (!webpayUrl) {
+          throw new Error('El servicio no entregó una URL de pago válida');
+        }
+
+        logPaymentEvent('Wallet deposit initiated', { paymentId, url: webpayUrl.substring(0, 50) + '...' });
+
+        // Guardar paymentId para reconciliación
+        if (paymentId) {
+            await AsyncStorage.setItem('waitingForPayment', String(paymentId));
+            await AsyncStorage.setItem(`payment_${paymentId}_timestamp`, Date.now().toString());
+            await AsyncStorage.setItem(`payment_${paymentId}_amount`, amountNum.toString());
+            if (token) {
+                await AsyncStorage.setItem(`payment_${paymentId}_token`, token);
+            }
+        }
+
+        console.log('🔵 [Wallet Deposit] Configurando WebView...');
+        
+        // Generar formulario HTML para auto-submit POST (Requerido para Transbank initTransaction)
+        const autoSubmitHtml = `
+          <!DOCTYPE html>
+          <html>
+            <head>
+              <title>Redirigiendo a WebPay...</title>
+              <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            </head>
+            <body onload="document.forms[0].submit()">
+              <div style="display: flex; justify-content: center; align-items: center; height: 100vh; flex-direction: column; font-family: sans-serif;">
+                <p>Redirigiendo a WebPay...</p>
+                <form action="${webpayUrl}" method="POST">
+                  <input type="hidden" name="token_ws" value="${token}" />
+                  <noscript>
+                    <input type="submit" value="Ir a pagar" />
+                  </noscript>
+                </form>
+              </div>
+            </body>
+          </html>
+        `;
+
+        // Configurar estados
+        setIsWaitingForPayment(true);
+        setWebviewHtml(autoSubmitHtml);
+        setWebviewUrl(webpayUrl); // Mantener URL para referencia
+        setLoading(false);
+        
+        // Pequeño delay para asegurar que los estados se actualicen antes de abrir el modal
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        console.log('🔵 [Wallet Deposit] Abriendo WebView con formulario POST...');
+        setWebviewVisible(true);
+
+        if (Platform.OS !== 'web') {
+           // Opcional: Toast o indicador
+        }
+        
+        return;
+      }
+      
       if (selectedMethod === 'wallet') {
         logPaymentEvent('Wallet payment initiated', { balance, amount });
         
@@ -477,8 +777,19 @@ export default function PaymentGatewayScreen() {
 
       // Abrir la URL dentro de la app usando WebView (in-app browser)
       const originalUrl = webpayData.url as string;
+      
+      console.log('🔵 [WebPay] Limpiando estado loading antes de abrir WebView...');
+      setLoading(false);  // Limpiar loading ANTES de abrir WebView
+      
       setWebviewUrl(originalUrl);
+      setWebviewHtml(null); // Asegurar que no hay HTML previo
+      
+      // Pequeño delay para que React actualice estados
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
       setWebviewVisible(true);
+      
+      console.log('🔵 [WebPay] WebView configurado. Visible:', true);
 
       // Mostrar instrucciones de prueba de tarjeta para QA/manual testing
       if (Platform.OS !== 'web') {
@@ -488,6 +799,8 @@ export default function PaymentGatewayScreen() {
           [{ text: 'Entendido' }]
         );
       }
+      
+      return; // Importante: salir aquí para no ejecutar el catch
     } catch (error: any) {
       logPaymentEvent('Payment initiation failed', { error: error?.message }, 'error');
       
@@ -516,29 +829,57 @@ export default function PaymentGatewayScreen() {
   };
 
   const markPaymentCancelled = async (paymentId?: string, reason?: string) => {
+    isCancelledRef.current = true;
     try {
       if (!paymentId) {
         // Try to read saved paymentId
         paymentId = await AsyncStorage.getItem('waitingForPayment');
       }
-      if (!paymentId) return;
+      
+      if (paymentId) {
+        // Intentar notificar al backend, pero no bloquear la UI si falla
+        apiService.fetch(`/payments/${paymentId}/status`, {
+            method: 'PATCH',
+            body: JSON.stringify({ estado: 'Fallido', detalles: reason || 'Anulado por el usuario' }),
+        }).catch(err => console.log('Error notifying backend of cancellation:', err));
 
-      await apiService.fetch(`/payments/${paymentId}/status`, {
-        method: 'PATCH',
-        body: JSON.stringify({ estado: 'Fallido', detalles: reason || 'Anulado por el usuario' }),
-      });
-
-      // Clean up
-      await AsyncStorage.removeItem('waitingForPayment');
-      setIsWaitingForPayment(false);
-      setPaymentStatus('cancelled');
+        // Clean up async storage
+        await AsyncStorage.removeItem('waitingForPayment');
+      }
     } catch (e) {
       console.error('Error marcando pago como anulado:', e);
+    } finally {
+        // UI Cleanup - FORCE reset ALWAYS
+        console.log('🛑 [PaymentGateway] Forcing cancellation state');
+        setIsWaitingForPayment(false);
+        setReconciliationNeeded(false);
+        setPollingAttempts(0);
+        setPaymentStatus('cancelled');
+        setLoading(false);
+        setWebviewVisible(false); // Ensure modal is closed
+        setWebviewHtml(null);
     }
   };
 
   const processSuccessfulPayment = async (paymentId?: string) => {
     try {
+      const serviceTypeStr = Array.isArray(serviceType) ? serviceType[0] : serviceType;
+      
+      // CASO ESPECIAL: WALLET DEPOSIT
+      if (serviceTypeStr === 'wallet_deposit') {
+        logPaymentEvent('Processing wallet deposit confirmation');
+        
+        // Refrescar saldo de wallet
+        await refreshWallet();
+        
+        setPaymentStatus('success');
+        setIsWaitingForPayment(false);
+        await AsyncStorage.removeItem('waitingForPayment');
+        logPaymentEvent('Wallet deposit processed successfully');
+        return;
+      }
+      
+      // RESTO DE CASOS: Publicaciones e inspecciones
       // Safety: ensure payment is confirmed in backend before creating any entities
       if (paymentId) {
         try {
@@ -577,8 +918,6 @@ export default function PaymentGatewayScreen() {
       console.log('Vehicle Data Keys:', Object.keys(vehicleData));
 
       // 2. Crear publicación (o inspección directa)
-      const serviceTypeStr = Array.isArray(serviceType) ? serviceType[0] : serviceType;
-
       if (serviceTypeStr === 'inspection_only') {
           console.log('Procesando pago de inspección para vehículo existente');
           const { publicationId, inspectionDate, inspectionTime, inspectionLocation, horarioId, solicitanteId } = vehicleData;
@@ -608,18 +947,21 @@ export default function PaymentGatewayScreen() {
           }
 
           const inspectionPrice = prices.find(p => p.nombre.toLowerCase() === 'inspeccion')?.precio || 40000;
+          const valorEntero = Math.round(Number(inspectionPrice));
 
           const inspectionData = {
             solicitanteId: solicitanteId || user.id,
             publicacionId: publicationId,
-            valor: inspectionPrice,
+            valor: valorEntero,
             estado_pago: 'Confirmado',
             paymentId: paymentId,
-            horarioId: horarioId,
-            fechaProgramada: fechaProgramada
+            horarioId: horarioId ? Number(horarioId) : undefined,
+            fechaProgramada: fechaProgramada,
+            estado_insp: 'Pendiente'
           };
 
           console.log('Creando inspección (inspection_only):', inspectionData);
+          console.log('Valor de inspección (entero):', valorEntero);
           await apiService.createInspection(inspectionData);
           
           setPaymentStatus('success');
@@ -742,19 +1084,22 @@ export default function PaymentGatewayScreen() {
           }
         }
 
+        const inspectionPrice = prices.find(p => p.nombre.toLowerCase() === 'inspeccion')?.precio || 40000;
+        const valorEntero = Math.round(Number(inspectionPrice));
+
         const inspectionData = {
           solicitanteId: user.id,
           publicacionId: publicationResponse.id,
-          sedeId: inspectionLocation,
           horarioId: horarioId ? Number(horarioId) : undefined,
           fechaProgramada: fechaProgramada,
-          valor: prices.find(p => p.nombre.toLowerCase() === 'inspeccion')?.precio || 40000,
-          estado: 'Solicitada',
+          valor: valorEntero,
+          estado_insp: 'Pendiente',
           estado_pago: 'Confirmado',
           paymentId: paymentId
         };
 
         console.log('Datos de inspección a crear:', inspectionData);
+        console.log('Valor de inspección (entero):', valorEntero);
         await apiService.createInspection(inspectionData);
         console.log('Inspección creada correctamente');
       }
@@ -781,7 +1126,8 @@ export default function PaymentGatewayScreen() {
   };
 
   const renderContent = () => {
-    if (loading || paymentStatus === 'verifying') {
+    // NO mostrar loading si el WebView está visible (usuario está en proceso de pago)
+    if ((loading || paymentStatus === 'verifying') && !webviewVisible) {
       return (
         <View style={styles.centerContainer}>
           <ActivityIndicator size="large" color="#4CAF50" />
@@ -792,41 +1138,49 @@ export default function PaymentGatewayScreen() {
             <Text style={styles.retryText}>Reintento {retryCount}/{MAX_RETRIES}</Text>
           )}
           {reconciliationNeeded && (
-            <>
-              <Text style={styles.warningText}>⚠️ Estamos verificando el estado de tu pago</Text>
-              <Text style={styles.infoText}>Por favor espera un momento...</Text>
-              <Button
+             <Button
+                title="Cancelar Verificación"
                 variant="outline"
-                title="Volver"
                 onPress={() => {
+                  markPaymentCancelled(undefined, 'Cancelado manualmente por usuario');
                   setReconciliationNeeded(false);
-                  setPaymentStatus('pending');
-                  router.back();
+                  setPaymentStatus('cancelled');
                 }}
-                style={{ marginTop: 20, width: 200 }}
+                style={{ marginTop: 20 }}
               />
-            </>
           )}
         </View>
       );
     }
 
     if (paymentStatus === 'success') {
+      const serviceTypeStr = Array.isArray(serviceType) ? serviceType[0] : serviceType;
+      const isWalletDeposit = serviceTypeStr === 'wallet_deposit';
+      
       return (
         <View style={styles.centerContainer}>
           <Ionicons name="checkmark-circle" size={80} color="#4CAF50" />
-          <Text style={styles.successTitle}>¡Pago Exitoso!</Text>
+          <Text style={styles.successTitle}>
+            {isWalletDeposit ? '¡Carga Exitosa!' : '¡Pago Exitoso!'}
+          </Text>
           <Text style={styles.successText}>
-            Tu operación ha sido procesada correctamente.
+            {isWalletDeposit 
+              ? 'Tu saldo ha sido recargado correctamente.'
+              : 'Tu operación ha sido procesada correctamente.'
+            }
           </Text>
           <Button
-            title="Ir a Mis Publicaciones"
+            title={isWalletDeposit ? "Volver a Mi Billetera" : "Ir a Mis Publicaciones"}
             onPress={() => {
-                // Navegar al tab de perfil o mis publicaciones
-                // router.replace('/(tabs)/profile'); 
-                // O dashboard
-                router.dismissAll();
-                router.replace('/(tabs)');
+                if (isWalletDeposit) {
+                  // Volver al wallet
+                  router.dismissAll();
+                  router.replace('/(tabs)/wallet');
+                } else {
+                  // Navegar al tab de perfil o mis publicaciones
+                  router.dismissAll();
+                  router.replace('/(tabs)');
+                }
             }}
             style={styles.homeButton}
           />
@@ -861,7 +1215,17 @@ export default function PaymentGatewayScreen() {
         );
     }
 
-    // PENDING STATE
+    // PENDING STATE - Si el WebView está visible, mostrar un placeholder simple
+    if (webviewVisible) {
+      console.log('🔵 [Render] Mostrando placeholder porque webviewVisible =', true);
+      return (
+        <View style={styles.centerContainer}>
+          <Text style={styles.loadingText}>Procesando pago...</Text>
+        </View>
+      );
+    }
+
+    console.log('🔵 [Render] Mostrando formulario de pago normal');
     return (
       <View style={styles.container}>
         <View style={styles.summaryCard}>
@@ -894,6 +1258,7 @@ export default function PaymentGatewayScreen() {
             {selectedMethod === 'webpay' && <Ionicons name="checkmark-circle" size={24} color="#4CAF50" />}
         </TouchableOpacity>
 
+        {(Array.isArray(serviceType) ? serviceType[0] : serviceType) !== 'wallet_deposit' && (
         <TouchableOpacity 
           style={[styles.methodCard, selectedMethod === 'wallet' && styles.selectedMethod]}
           onPress={() => setSelectedMethod('wallet')}
@@ -907,6 +1272,7 @@ export default function PaymentGatewayScreen() {
             </View>
             {selectedMethod === 'wallet' && <Ionicons name="checkmark-circle" size={24} color="#4CAF50" />}
         </TouchableOpacity>
+        )}
 
         <Button
           title={`Pagar $${Number(amount).toLocaleString('es-CL')}`}
@@ -921,10 +1287,12 @@ export default function PaymentGatewayScreen() {
     <Screen backgroundColor="#F5F5F5">
       {renderContent()}
 
+
       <Modal
         visible={webviewVisible}
         animationType="slide"
-        presentationStyle="pageSheet"
+        presentationStyle="fullScreen"
+        transparent={false}
         onRequestClose={() => {
             Alert.alert(
                 'Cancelar Pago',
@@ -941,7 +1309,7 @@ export default function PaymentGatewayScreen() {
       >
         <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }}>
             <View style={styles.webviewHeader}>
-                <Text style={styles.webviewTitle}>WebPay</Text>
+                <Text style={styles.webviewTitle}>WebPay - Transbank</Text>
                 <TouchableOpacity onPress={() => {
                      Alert.alert(
                         'Cancelar Pago',
@@ -958,21 +1326,110 @@ export default function PaymentGatewayScreen() {
                     <Ionicons name="close" size={24} color="#333" />
                 </TouchableOpacity>
             </View>
-            {webviewUrl ? (
+            {(webviewUrl || webviewHtml) ? (
                 <WebView
-                    source={{ uri: webviewUrl }}
+                    source={webviewHtml ? { html: webviewHtml, baseUrl: 'https://webpay3gint.transbank.cl' } : { uri: webviewUrl as string }}
                     style={{ flex: 1 }}
+                    startInLoadingState={true}
+                    renderLoading={() => (
+                        <View style={[styles.centerContainer, { flex: 1, position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#fff' }]}>
+                            <ActivityIndicator size="large" color="#4CAF50" />
+                            <Text style={{ marginTop: 16, color: '#666' }}>Cargando WebPay...</Text>
+                        </View>
+                    )}
+                    onLoadStart={() => {
+                        console.log('🔵 [WebView] Iniciando carga. HTML Presente:', !!webviewHtml, 'URL:', webviewUrl);
+                    }}
+                    onLoadEnd={() => {
+                        console.log('✅ [WebView] Carga completada');
+                    }}
+                    onError={(syntheticEvent) => {
+                        const { nativeEvent } = syntheticEvent;
+                        console.error('❌ [WebView] Error:', nativeEvent);
+                        Alert.alert(
+                            'Error al cargar WebPay',
+                            `No se pudo cargar la página de pago.\n\nError: ${nativeEvent.description}\n\nURL: ${webviewUrl}`,
+                            [
+                                { text: 'Cerrar', onPress: () => setWebviewVisible(false) },
+                                { text: 'Reintentar', onPress: () => {
+                                    if (webviewHtml) {
+                                        const current = webviewHtml;
+                                        setWebviewHtml(null);
+                                        setTimeout(() => setWebviewHtml(current), 100);
+                                    } else {
+                                        const current = webviewUrl;
+                                        setWebviewUrl(null);
+                                        setTimeout(() => setWebviewUrl(current), 100);
+                                    }
+                                }}
+                            ]
+                        );
+                    }}
+                    onHttpError={(syntheticEvent) => {
+                        const { nativeEvent } = syntheticEvent;
+                        console.error('❌ [WebView] HTTP Error:', nativeEvent.statusCode, nativeEvent.url);
+                    }}
                     onNavigationStateChange={(navState) => {
-                        // Detectar retorno a la app (deep link) o finalización
-                        if (navState.url.includes('payments/webpay/callback') || navState.url.includes('payments/webpay/finish')) {
+                        console.log('🔵 [WebView] Navegación:', navState.url);
+                        console.log('🔵 [WebView] Loading:', navState.loading);
+                        
+                        // NO cerrar mientras está cargando (a menos que sea el mismo link final)
+                        if (navState.loading) {
+                            return;
+                        }
+                        
+                        // 1. Detectar Deep Links de la App (autobox://)
+                        if (navState.url.includes('autobox://payment-success')) {
+                            console.log('✅ [WebView] Deep Link Success detectado');
+                            setWebviewVisible(false);
+                            checkPendingPayment(); // Esto confirmará con el backend/storage
+                            return;
+                        }
+
+                        if (navState.url.includes('autobox://payment-cancelled')) {
+                            console.log('🛑 [WebView] Deep Link Cancelled detectado');
+                            setWebviewVisible(false);
+                            markPaymentCancelled(undefined, 'Cancelado en WebPay');
+                            return;
+                        }
+
+                        // 2. Detectar URLs de callback del propio backend (fallback por si el JS no corre)
+                        const isPaymentCallback = navState.url.includes('payments/webpay/callback') || 
+                                                 navState.url.includes('payments/webpay/finish') ||
+                                                 navState.url.includes('payments/public/webpay/return') ||
+                                                 navState.url.includes('payments/public/webpay/confirm');
+                                                 
+                        const isWalletCallback = navState.url.includes('wallet/public/deposit/transbank/return') ||
+                                                navState.url.includes('wallet/deposit/transbank/confirm');
+                        
+                        // 3. Detectar anulación directa de Transbank (TBK_TOKEN + TBK_ORDEN_COMPRA)
+                        // Esto ocurre cuando el usuario presiona "Anular" en el formulario de Webpay
+                        if (navState.url.includes('TBK_TOKEN') && navState.url.includes('TBK_ORDEN_COMPRA')) {
+                             console.log('🛑 [WebView] Transacción anulada por usuario (TBK_TOKEN)');
                              setWebviewVisible(false);
+                             setTimeout(() => {
+                                 markPaymentCancelled(undefined, 'Anulado por usuario en WebPay');
+                             }, 500);
+                             return;
+                        }
+                        
+                        if (isPaymentCallback || isWalletCallback) {
+                             console.log('✅ [WebView] Backend Callback URL detectada - Cerrando inmediatamente');
+                             
+                             // CERRAR INMEDIATAMENTE: No esperar carga de HTML
+                             setWebviewVisible(false);
+                             
+                             // Iniciar verificación en background inmediatamente
                              checkPendingPayment();
+                             
+                             return; 
                         }
                     }}
                 />
             ) : (
                 <View style={[styles.centerContainer, { flex: 1 }]}>
-                    <ActivityIndicator size="large" />
+                    <ActivityIndicator size="large" color="#4CAF50" />
+                    <Text style={{ marginTop: 16, color: '#666' }}>Preparando pago...</Text>
                 </View>
             )}
         </SafeAreaView>

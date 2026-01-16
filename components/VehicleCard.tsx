@@ -26,7 +26,13 @@ export const VehicleCard: React.FC<VehicleCardProps> = ({
   onPress,
   isActive = false
 }) => {
-  console.log('VehicleCard render - vehicle:', vehicle.id, 'valor:', vehicle.valor, 'price:', vehicle.price);
+  // Guard clause for null/undefined vehicle
+  if (!vehicle) {
+    console.warn('⚠️ [VehicleCard] Rendered with null/undefined vehicle object');
+    return null;
+  }
+
+  // console.log('VehicleCard render - vehicle:', vehicle.id, 'valor:', vehicle.valor, 'price:', vehicle.price);
   const [currentMediaIndex, setCurrentMediaIndex] = useState(0);
   const videoRef = useRef<Video>(null);
   

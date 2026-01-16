@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, Image, Dimensions, TouchableOpacity, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { Screen } from '../components/ui/Screen';
 import { Button } from '../components/ui/Button';
@@ -13,7 +13,18 @@ const { width } = Dimensions.get('window');
 
 export default function VehicleDetailScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams();
+  
+  if (!params) {
+    console.error('❌ [VehicleDetailScreen] params is null');
+    return null;
+  }
+  
+  console.log('🚗 [VehicleDetailScreen] Params:', params);
+  
   const { vehicle, loading, isLiked, isOwner, toggleLike, deactivateVehicle, refresh } = useVehicleDetail();
+  console.log('🚗 [VehicleDetailScreen] State:', { loading, hasVehicle: !!vehicle });
+  
   const [muted, setMuted] = useState(false);
 
   // Refresh when screen comes into focus
@@ -79,11 +90,23 @@ export default function VehicleDetailScreen() {
     });
   };
 
-  if (loading || !vehicle) {
+  if (loading) {
     return (
       <Screen backgroundColor="#FFF">
         <View style={styles.centerContainer}>
           <Text>Cargando vehículo...</Text>
+        </View>
+      </Screen>
+    );
+  }
+
+  if (!vehicle) {
+    return (
+      <Screen backgroundColor="#FFF">
+        <View style={styles.centerContainer}>
+          <Ionicons name="alert-circle-outline" size={48} color="#CCC" />
+          <Text style={{ marginTop: 12, color: '#666' }}>No se pudo cargar la información del vehículo.</Text>
+          <Button title="Volver" variant="outline" onPress={() => router.back()} style={{ marginTop: 16 }} />
         </View>
       </Screen>
     );
@@ -190,6 +213,7 @@ export default function VehicleDetailScreen() {
               variant="outline"
               style={{ marginBottom: 12 }}
               onPress={() => {
+                if (!vehicle) return;
                 router.push({
                   pathname: '/edit-publication',
                   params: { 
@@ -215,6 +239,7 @@ export default function VehicleDetailScreen() {
               variant="outline"
               style={{ marginBottom: 12 }}
               onPress={() => {
+                if (!vehicle) return;
                 router.push({
                   pathname: '/schedule-inspection',
                   params: { 
@@ -227,6 +252,7 @@ export default function VehicleDetailScreen() {
             <Button 
               title="Contactar Vendedor" 
               onPress={() => {
+                if (!vehicle) return;
                 const sellerName = (vehicle as any).user 
                   ? `${(vehicle as any).user.primerNombre} ${(vehicle as any).user.primerApellido}` 
                   : 'Vendedor';

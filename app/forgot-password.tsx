@@ -36,6 +36,14 @@ export default function ForgotPasswordScreen() {
     special: false,
   });
   const [showPasswordErrors, setShowPasswordErrors] = useState(false);
+  const [cooldown, setCooldown] = useState(0);
+
+  useEffect(() => {
+    if (cooldown > 0) {
+      const timer = setInterval(() => setCooldown(c => c - 1), 1000);
+      return () => clearInterval(timer);
+    }
+  }, [cooldown]);
 
   useEffect(() => {
     if (password) {
@@ -53,6 +61,8 @@ export default function ForgotPasswordScreen() {
   }, [password]);
 
   const handleSendCode = async () => {
+    if (cooldown > 0) return;
+
     if (!email) {
         setEmailError('Ingresa tu correo');
         return;
@@ -76,6 +86,7 @@ export default function ForgotPasswordScreen() {
         } else {
            Alert.alert('Código enviado', 'Revisa tu correo electrónico para obtener el código de recuperación.');
         }
+        setCooldown(60);
         setStep(2);
     } catch (error: any) {
         Alert.alert('Error', error.message || 'No se pudo enviar el código');
@@ -166,10 +177,11 @@ export default function ForgotPasswordScreen() {
                     error={emailError}
                   />
                   <Button
-                    title="Enviar Código"
+                    title={cooldown > 0 ? `Reenviar en ${cooldown}s` : "Enviar Código"}
                     onPress={handleSendCode}
                     loading={loading}
-                    style={styles.button}
+                    disabled={cooldown > 0}
+                    style={[styles.button, cooldown > 0 && { opacity: 0.5 }]}
                   />
               </View>
           )}

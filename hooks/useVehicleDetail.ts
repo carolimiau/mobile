@@ -16,6 +16,9 @@ export function useVehicleDetail() {
     loadCurrentUser();
     if (id) {
       loadVehicle(id as string);
+    } else {
+       console.warn('⚠️ [useVehicleDetail] Hook called without ID param');
+       setLoading(false);
     }
   }, [id]);
 
@@ -28,6 +31,14 @@ export function useVehicleDetail() {
     try {
       setLoading(true);
       const data = await apiService.getVehicleById(vehicleId);
+      console.log('🚗 [useVehicleDetail] Loaded vehicle data:', data);
+      
+      if (!data) {
+        console.error('❌ [useVehicleDetail] Vehicle data is null/undefined for ID:', vehicleId);
+        setVehicle(null);
+        return;
+      }
+
       setVehicle(data);
 
       if (data.publicationId) {
@@ -75,7 +86,7 @@ export function useVehicleDetail() {
             try {
               await apiService.deactivatePublication(vehicle.publicationId!);
               Alert.alert('Éxito', 'Publicación eliminada correctamente', [
-                { text: 'OK', onPress: () => loadVehicle(vehicle.id) }
+                { text: 'OK', onPress: () => vehicle?.id && loadVehicle(vehicle.id) }
               ]);
             } catch (error: any) {
               const errorMessage = error.message || 'No se pudo eliminar la publicación';
@@ -87,7 +98,7 @@ export function useVehicleDetail() {
     );
   };
 
-  const isOwner = currentUser?.id === vehicle?.userId;
+  const isOwner = !!(currentUser && vehicle && currentUser.id === vehicle.userId);
 
   const refresh = useCallback(() => {
     if (id) {
