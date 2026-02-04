@@ -9,6 +9,11 @@
     },
     "preview": {
       "distribution": "internal",
+      "env":{
+       "EXPO_PUBLIC_API_URL": "https://backend-kg0o.onrender.com",
+       "EXPO_PUBLIC_PAYMENT_URL": "https://payment-uby0.onrender.com",
+       "EXPO_PUBLIC_SOCKET_URL": "https://websocket-ufng.onrender.com"
+      },
       "android": {
         "buildType": "apk"
       }
