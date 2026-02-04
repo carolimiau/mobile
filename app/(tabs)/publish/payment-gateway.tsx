@@ -10,7 +10,7 @@ import apiService from '../../../services/apiService';
 import authService from '../../../services/authService';
 import walletService from '../../../services/walletService';
 import { useWallet } from '../../../hooks/useWallet';
-import { API_URL, LOCAL_IP } from '../../../constants/Config';
+import {API_URL} from '../../../constants/Config';
 
 // Configuración de reintentos
 const MAX_RETRIES = 2; // Reducido de 3 a 2
