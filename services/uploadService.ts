@@ -1,5 +1,5 @@
 // services/uploadService.ts
-import * as FileSystem from 'expo-file-system/legacy';
+import * as FileSystem from 'expo-file-system/legacy'; // O 'expo-file-system' si te da warning
 import * as ImagePicker from 'expo-image-picker';
 import apiService from './apiService';
 
@@ -11,15 +11,103 @@ export interface UploadedFile {
 }
 
 class UploadService {
-  
-  // ... (pickImage, pickMultipleImages, pickMultipleVideos, pickDocument SE QUEDAN IGUAL) ...
-  // ... Puedes dejar esas funciones de selección tal cual están arriba ...
+  /**
+   * Selecciona una imagen de la galería o cámara
+   * (ESTA ES LA QUE FALTABA)
+   */
+  async pickImage(useCamera = false): Promise<ImagePicker.ImagePickerAsset | null> {
+    const { status } = await (useCamera 
+      ? ImagePicker.requestCameraPermissionsAsync()
+      : ImagePicker.requestMediaLibraryPermissionsAsync()
+    );
 
-  // 👇👇👇 AQUÍ EMPIEZA LO NUEVO 👇👇👇
+    if (status !== 'granted') {
+      throw new Error('Permiso denegado para acceder a las imágenes');
+    }
+
+    const result = useCamera
+      ? await ImagePicker.launchCameraAsync({
+          mediaTypes: ImagePicker.MediaTypeOptions.Images,
+          allowsEditing: true,
+          aspect: [4, 3],
+          quality: 0.8,
+        })
+      : await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ImagePicker.MediaTypeOptions.Images,
+          allowsEditing: true,
+          aspect: [4, 3],
+          quality: 0.8,
+          allowsMultipleSelection: false,
+        });
+
+    if (!result.canceled && result.assets.length > 0) {
+      return result.assets[0];
+    }
+
+    return null;
+  }
+
+  /**
+   * Selecciona múltiples imágenes
+   * (TAMBIÉN FALTABA)
+   */
+  async pickMultipleImages(maxImages = 6): Promise<ImagePicker.ImagePickerAsset[]> {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+    if (status !== 'granted') {
+      throw new Error('Permiso denegado para acceder a las imágenes');
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsMultipleSelection: true,
+      quality: 0.8,
+      selectionLimit: maxImages,
+    });
+
+    if (!result.canceled) {
+      return result.assets.slice(0, maxImages);
+    }
+
+    return [];
+  }
+
+  /**
+   * Selecciona múltiples videos
+   */
+  async pickMultipleVideos(maxVideos = 6): Promise<ImagePicker.ImagePickerAsset[]> {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+    if (status !== 'granted') {
+      throw new Error('Permiso denegado para acceder a los videos');
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Videos,
+      allowsMultipleSelection: true,
+      quality: 0.7,
+      videoMaxDuration: 60,
+      selectionLimit: maxVideos,
+    });
+
+    if (!result.canceled) {
+      return result.assets.slice(0, maxVideos);
+    }
+
+    return [];
+  }
+
+  /**
+   * Selecciona un documento
+   */
+  async pickDocument(): Promise<any | null> {
+    console.log('La selección de documentos aún no está implementada');
+    return null;
+  }
 
   /**
    * Sube un archivo a Cloudinary usando firma del backend
-   * (Esta es la función MAESTRA que cambiamos)
+   * (ESTA ES LA LÓGICA NUEVA QUE YA TENÍAMOS BIEN)
    */
   async uploadFile(
     fileUri: string,
@@ -38,7 +126,7 @@ class UploadService {
         folder,
       });
 
-      // Backend devuelve: url, signature, apiKey, timestamp, publicId, publicUrl...
+      // Extraemos todo lo que nos mandó el backend
       const { url, publicUrl, key, signature, apiKey, timestamp, publicId } = response;
 
       if (!url) {
@@ -49,14 +137,13 @@ class UploadService {
 
       // 2. Subir a Cloudinary (POST Multipart)
       const uploadResponse = await FileSystem.uploadAsync(url, fileUri, {
-        httpMethod: 'POST', // Cloudinary usa POST
+        httpMethod: 'POST', 
         uploadType: FileSystem.FileSystemUploadType.MULTIPART,
-        fieldName: 'file', // OBLIGATORIO: Cloudinary pide que el archivo se llame 'file'
+        fieldName: 'file', // OBLIGATORIO: Cloudinary pide 'file'
         headers: {
-            // FileSystem pone el Content-Type multipart automáticamente
+            // FileSystem pone multipart/form-data automático
         },
         parameters: {
-            // Los datos secretos que nos dio el backend
             api_key: apiKey,
             timestamp: String(timestamp),
             signature: signature,
@@ -76,8 +163,8 @@ class UploadService {
       console.log('✅ [UploadService] Upload successful:', publicUrl);
 
       return {
-        key,         // public_id
-        publicUrl,   // URL final
+        key,         
+        publicUrl,   
         fileName,
         fileType,
       };
@@ -117,7 +204,7 @@ class UploadService {
   }
 
   /**
-   * Elimina un archivo (El backend se encarga de saber que es Cloudinary)
+   * Elimina un archivo
    */
   async deleteFile(key: string): Promise<void> {
     try {
@@ -136,7 +223,6 @@ class UploadService {
       const response = await apiService.post('/uploads/presigned-download', {
         key,
       });
-      // ⚠️ CORRECCIÓN: Tu backend ahora devuelve { url: "..." }, no { downloadUrl: "..." }
       return response.url || response.downloadUrl; 
     } catch (error) {
       console.error('Error al obtener URL de descarga:', error);
@@ -144,7 +230,6 @@ class UploadService {
     }
   }
 
-  // Helper de MimeType (Se queda igual)
   getMimeType(uri: string): string {
     const extension = uri.split('.').pop()?.toLowerCase();
     const mimeTypes: { [key: string]: string } = {
@@ -164,10 +249,8 @@ class UploadService {
     return mimeTypes[extension || ''] || 'application/octet-stream';
   }
 
-  /**
-   * Sube una foto de perfil (avatar)
-   * Solo cambié los logs, la lógica usa uploadFile así que está OK.
-   */
+  // --- WRAPPERS (Funcionan porque llaman a uploadFile) ---
+
   async uploadAvatar(
     imageUri: string,
     userId: string,
@@ -184,7 +267,6 @@ class UploadService {
         'users',
         onProgress
       );
-
       return result.publicUrl;
     } catch (error) {
       console.error('Error al subir avatar:', error);
@@ -192,13 +274,10 @@ class UploadService {
     }
   }
 
-  /**
-   * Sube un informe PDF de inspección
-   */
   async uploadInspectionReport(
     file: { uri: string; name: string; mimeType?: string },
     inspectionId: string,
-    token: string, // <-- Este token ya no se usa aquí, pero lo dejo por compatibilidad
+    token: string,
     onProgress?: (progress: number) => void
   ): Promise<string> {
     try {
@@ -212,7 +291,6 @@ class UploadService {
         'inspection-reports',
         onProgress
       );
-
       return result.publicUrl;
     } catch (error) {
       console.error('Error al subir informe PDF:', error);
@@ -220,9 +298,6 @@ class UploadService {
     }
   }
 
-  /**
-   * Sube documentos o fotos adicionales de la inspección
-   */
   async uploadInspectionMedia(
     file: { uri: string; name: string; mimeType?: string },
     inspectionId: string,
@@ -234,7 +309,6 @@ class UploadService {
       const fileName = `inspection_${inspectionId}_doc_${Date.now()}.${extension}`;
       const fileType = file.mimeType || 'application/octet-stream';
       
-      // 👇 Aquí está la magia: llama a uploadFile (que ya arreglamos), así que esto funciona.
       const result = await this.uploadFile(
         file.uri,
         fileName,
@@ -242,7 +316,6 @@ class UploadService {
         'inspection-media',
         onProgress
       );
-
       return result.publicUrl;
     } catch (error) {
       console.error('Error al subir documento de inspección:', error);
