@@ -8,13 +8,11 @@ import {
   RefreshControl,
   TouchableOpacity,
   Alert,
-  Platform,
 } from 'react-native';
-import DateTimePicker from '@react-native-community/datetimepicker';
 import { Ionicons } from '@expo/vector-icons';
 import { Screen } from '../../components/ui/Screen';
 import { usePayments } from '../../hooks/usePayments';
-import paymentService from '../../services/paymentService';
+import paymentService, { Payment, PaymentStatus } from '../../services/paymentService';
 
 export default function PaymentsScreen() {
   const {
@@ -23,526 +21,342 @@ export default function PaymentsScreen() {
     refreshing,
     selectedFilter,
     setSelectedFilter,
-    startDate,
-    setStartDate,
-    endDate,
-    setEndDate,
-    onRefresh: originalOnRefresh,
+    onRefresh: refreshPaymentsList, // Renombramos la del hook para usarla en nuestro wrapper
     updatePaymentStatus,
+    totalAmount
   } = usePayments();
 
-  // Local state for financial summary
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  
+  // Estado local para los totales (Resumen financiero)
   const [financialSummary, setFinancialSummary] = useState({ 
     totalConfirmed: 0, 
     totalUserBalance: 0, 
     totalMechanicWithdrawals: 0 
   });
 
+  // Cargar resumen al montar
   useEffect(() => {
      loadFinancialSummary();
-  }, [refreshing]);
+  }, []);
 
   const loadFinancialSummary = async () => {
-     const summary = await paymentService.getFinancialSummary();
-     setFinancialSummary(summary);
+     try {
+       const summary = await paymentService.getFinancialSummary();
+       setFinancialSummary(summary);
+     } catch (error) {
+       console.log('Error cargando resumen', error);
+     }
   };
 
-  const onRefresh = async () => {
-    await originalOnRefresh();
-    await loadFinancialSummary();
+  // 🔄 Wrapper para actualizar TODO (Lista + Resumen) al deslizar
+  const handleRefresh = async () => {
+    // 1. Recargar resumen financiero
+    loadFinancialSummary();
+    // 2. Recargar lista de pagos (del hook)
+    await refreshPaymentsList();
   };
 
-  const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [showPicker, setShowPicker] = useState(false);
-  const [pickerMode, setPickerMode] = useState<'start' | 'end'>('start');
-
-  const onDateChange = (event: any, selectedDate?: Date) => {
-    if (Platform.OS === 'android') {
-      setShowPicker(false);
-    }
-    
-    if (event.type === 'dismissed') {
-      return;
-    }
-
-    if (selectedDate) {
-      if (pickerMode === 'start') {
-        setStartDate(selectedDate);
-      } else {
-        setEndDate(selectedDate);
-      }
-    }
+  const toggleExpand = (id: string) => {
+    setExpandedId(expandedId === id ? null : id);
   };
 
-  const showDatePicker = (mode: 'start' | 'end') => {
-    setPickerMode(mode);
-    setShowPicker(true);
-  };
-
-  const clearDates = () => {
-    setStartDate(null);
-    setEndDate(null);
-  };
-
-  const renderFilterButton = (filter: typeof selectedFilter, label: string) => (
-    <TouchableOpacity
-      style={[
-        styles.filterButton,
-        selectedFilter === filter && styles.filterButtonActive,
-      ]}
-      onPress={() => setSelectedFilter(filter)}
-    >
-      <Text
-        style={[
-          styles.filterButtonText,
-          selectedFilter === filter && styles.filterButtonTextActive,
-        ]}
-      >
-        {label}
-      </Text>
-    </TouchableOpacity>
-  );
-
-  const renderPaymentItem = ({ item }: { item: any }) => {
+  const renderItem = ({ item }: { item: Payment }) => {
     const isExpanded = expandedId === item.id;
-    const isWithdrawal = item.tipo === 'RETIRO' || item.metodo === 'Retiro';
     const statusColor = paymentService.getStatusColor(item.estado);
-
+    const date = new Date(item.fechaCreacion).toLocaleDateString('es-CL');
+    
     return (
-      <View style={styles.paymentCard}>
-        <TouchableOpacity
-          style={styles.paymentHeader}
-          onPress={() => setExpandedId(isExpanded ? null : item.id)}
-          activeOpacity={0.7}
-        >
-          <View style={styles.paymentInfo}>
-            <Text style={[styles.paymentAmount, isWithdrawal && { color: '#F44336' }]}>
-              {isWithdrawal ? '- ' : ''}{paymentService.formatCurrency(item.monto)}
+      <TouchableOpacity 
+        style={styles.card} 
+        onPress={() => toggleExpand(item.id)}
+        activeOpacity={0.9}
+      >
+        <View style={styles.cardHeader}>
+          <View style={styles.iconContainer}>
+            <View style={[styles.iconBg, { backgroundColor: statusColor + '20' }]}>
+              <Ionicons 
+                name={item.metodo === 'WebPay' ? 'card-outline' : 'cash-outline'} 
+                size={24} 
+                color={statusColor} 
+              />
+            </View>
+          </View>
+          
+          <View style={styles.cardInfo}>
+            <Text style={styles.amount}>{paymentService.formatCurrency(item.monto)}</Text>
+            <Text style={styles.userText}>
+              {item.usuario?.nombre ? `${item.usuario.nombre} ${item.usuario.apellido}` : 'Usuario'}
             </Text>
-            <Text style={styles.paymentMeta}>
-              {isWithdrawal ? 'Mecánico: ' : ''}{item.usuario?.primerNombre} {item.usuario?.primerApellido}
-            </Text>
-            <Text style={styles.paymentDate}>
-              {new Date(item.fechaCreacion).toLocaleDateString('es-CL')}
-            </Text>
+            <Text style={styles.dateText}>{date} • {item.metodo}</Text>
           </View>
 
-          <View style={styles.paymentRight}>
-            <View
-              style={[
-                styles.statusBadge,
-                { backgroundColor: statusColor },
-              ]}
-            >
+          <View style={styles.statusContainer}>
+            <View style={[styles.statusBadge, { backgroundColor: statusColor }]}>
               <Text style={styles.statusText}>
                 {paymentService.getStatusLabel(item.estado)}
               </Text>
             </View>
-            <Ionicons
-              name={isExpanded ? 'chevron-up' : 'chevron-down'}
-              size={20}
-              color="#666"
+            <Ionicons 
+              name={isExpanded ? 'chevron-up' : 'chevron-down'} 
+              size={20} 
+              color="#999" 
+              style={{ marginTop: 4, alignSelf: 'flex-end' }}
             />
           </View>
-        </TouchableOpacity>
+        </View>
 
         {isExpanded && (
-          <View style={styles.paymentDetails}>
+          <View style={styles.detailsContainer}>
             <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Método:</Text>
-              <Text style={styles.detailValue}>
-                {paymentService.getMethodLabel(item.metodo)}
-              </Text>
+              <Text style={styles.detailLabel}>ID Transacción (Webpay):</Text>
+              {/* Mostramos el token/idempotencyKey si existe */}
+              <Text style={styles.detailValue}>{item.idempotencyKey || 'N/A'}</Text>
             </View>
+            
             <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>ID de Pago:</Text>
-              <Text style={styles.detailValue}>{item.id.slice(0, 12)}...</Text>
+              <Text style={styles.detailLabel}>Detalle (Orden):</Text>
+              <Text style={styles.detailValue}>{item.detalles || 'Sin detalles'}</Text>
             </View>
-            {item.detalles && (
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Detalles:</Text>
-                <Text style={styles.detailValue}>{item.detalles}</Text>
-              </View>
-            )}
-            {item.idempotencyKey && (
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Ref Idempotencia:</Text>
-                <Text style={styles.detailValue}>
-                  {item.idempotencyKey.slice(0, 12)}...
-                </Text>
-              </View>
-            )}
 
-            {item.estado?.toUpperCase() === 'INCOMPLETO' && (
-              <TouchableOpacity
-                style={styles.actionButton}
-                onPress={() => {
-                  Alert.alert(
-                    'Cambiar a Confirmado',
-                    '¿Estás seguro de marcar este pago como confirmado?',
-                    [
-                      { text: 'Cancelar', style: 'cancel' },
-                      {
-                        text: 'Confirmar',
-                        onPress: () => updatePaymentStatus(item.id, 'Confirmado'),
-                      },
-                    ]
-                  );
-                }}
-              >
-                <Ionicons name="checkmark-circle" size={16} color="#fff" />
-                <Text style={styles.actionButtonText}>Confirmar Pago</Text>
-              </TouchableOpacity>
-            )}
-
-            {item.estado?.toUpperCase() !== 'CANCELADO' && (
-              <TouchableOpacity
-                style={[styles.actionButton, styles.actionButtonDanger]}
-                onPress={() => {
-                  Alert.alert(
-                    'Cancelar Pago',
-                    '¿Estás seguro de cancelar este pago?',
-                    [
-                      { text: 'No', style: 'cancel' },
-                      {
-                        text: 'Sí, cancelar',
-                        onPress: () => updatePaymentStatus(item.id, 'Cancelado'),
-                        style: 'destructive',
-                      },
-                    ]
-                  );
-                }}
-              >
-                <Ionicons name="close-circle" size={16} color="#fff" />
-                <Text style={styles.actionButtonText}>Cancelar Pago</Text>
-              </TouchableOpacity>
-            )}
+            <View style={styles.actionsRow}>
+                {/* Botón Manual solo si está Pendiente */}
+                {item.estado === PaymentStatus.PENDING && (
+                  <TouchableOpacity 
+                    style={[styles.actionButton, { backgroundColor: '#4CAF50' }]}
+                    onPress={() => updatePaymentStatus(item.id, PaymentStatus.COMPLETED)}
+                  >
+                    <Text style={styles.actionText}>Marcar Completado</Text>
+                  </TouchableOpacity>
+                )}
+            </View>
           </View>
         )}
-      </View>
+      </TouchableOpacity>
     );
   };
 
   return (
-    <Screen backgroundColor="#F5F5F5">
-      <View style={styles.container}>
-        {/* Summary Card */}
+    <Screen>
+      {/* 👇 AQUÍ REEMPLAZAMOS LA FUNCIÓN 'title' POR UN HEADER MANUAL 👇 */}
+      <View style={styles.headerContainer}>
+        <Text style={styles.screenTitle}>Gestión de Pagos</Text>
+      </View>
+
+      <View style={styles.summaryContainer}>
         <View style={styles.summaryCard}>
-          <View style={styles.summaryItem}>
-            <Text style={styles.summaryLabel}>Total Confirmado</Text>
-            <Text style={styles.summaryAmount}>
+            <Text style={styles.summaryLabel}>Total Ingresos</Text>
+            <Text style={[styles.summaryValue, { color: '#4CAF50' }]}>
               {paymentService.formatCurrency(financialSummary.totalConfirmed)}
             </Text>
-          </View>
-          <View style={styles.summaryDivider} />
-          <View style={styles.summaryItem}>
-            <Text style={styles.summaryLabel}>Retiros Mec.</Text>
-            <Text style={[styles.summaryAmount, { color: '#F44336' }]}>
+        </View>
+        <View style={styles.summaryCard}>
+            <Text style={styles.summaryLabel}>Retiros Mecánicos</Text>
+            <Text style={[styles.summaryValue, { color: '#F44336' }]}>
               {paymentService.formatCurrency(financialSummary.totalMechanicWithdrawals)}
             </Text>
-          </View>
-          <View style={styles.summaryDivider} />
-          <View style={styles.summaryItem}>
-            <Text style={styles.summaryLabel}>Saldo Usuarios</Text>
-            <Text style={styles.summaryAmount}>
-              {paymentService.formatCurrency(financialSummary.totalUserBalance)}
-            </Text>
-          </View>
         </View>
-
-        {/* Filters */}
-        <View style={styles.filterContainer}>
-          {renderFilterButton('all', 'Todos')}
-          {renderFilterButton('confirmado', 'Confirmados')}
-          {renderFilterButton('incompleto', 'Incompletos')}
-          {renderFilterButton('cancelado', 'Cancelados')}
-        </View>
-
-        {/* Date Filter Controls */}
-        <View style={styles.dateFilterContainer}>
-          <TouchableOpacity 
-            style={styles.dateButton} 
-            onPress={() => showDatePicker('start')}
-          >
-            <Ionicons name="calendar-outline" size={16} color="#666" />
-            <Text style={styles.dateButtonText}>
-              {startDate ? startDate.toLocaleDateString('es-CL') : 'Desde'}
-            </Text>
-          </TouchableOpacity>
-
-          <Text style={styles.dateSeparator}>-</Text>
-          
-          <TouchableOpacity 
-            style={styles.dateButton} 
-            onPress={() => showDatePicker('end')}
-          >
-            <Ionicons name="calendar-outline" size={16} color="#666" />
-            <Text style={styles.dateButtonText}>
-              {endDate ? endDate.toLocaleDateString('es-CL') : 'Hasta'}
-            </Text>
-          </TouchableOpacity>
-
-          {(startDate || endDate) && (
-            <TouchableOpacity onPress={clearDates} style={styles.clearDateButton}>
-              <Ionicons name="close-circle" size={20} color="#F44336" />
-            </TouchableOpacity>
-          )}
-        </View>
-
-        {showPicker && (
-          <DateTimePicker
-            testID="dateTimePicker"
-            value={pickerMode === 'start' ? (startDate || new Date()) : (endDate || new Date())}
-            mode="date"
-            is24Hour={true}
-            display="default"
-            onChange={onDateChange}
-            maximumDate={new Date()}
-          />
-        )}
-
-        {/* List */}
-        {loading && !refreshing ? (
-          <View style={styles.centerContainer}>
-            <ActivityIndicator size="large" color="#007bff" />
-          </View>
-        ) : payments.length === 0 ? (
-          <View style={styles.centerContainer}>
-            <Ionicons name="wallet-outline" size={48} color="#CCC" />
-            <Text style={styles.emptyText}>
-              {selectedFilter === 'all'
-                ? 'No hay pagos registrados'
-                : `No hay pagos ${paymentService.getStatusLabel(selectedFilter)}`}
-            </Text>
-          </View>
-        ) : (
-          <FlatList
-            data={payments}
-            renderItem={renderPaymentItem}
-            keyExtractor={(item) => item.id}
-            contentContainerStyle={styles.listContent}
-            refreshControl={
-              <RefreshControl
-                refreshing={refreshing}
-                onRefresh={onRefresh}
-                colors={['#007bff']}
-              />
-            }
-          />
-        )}
       </View>
+
+      <View style={styles.filtersContainer}>
+        <TouchableOpacity 
+          style={[styles.filterChip, selectedFilter === 'all' && styles.activeFilter]}
+          onPress={() => setSelectedFilter('all')}
+        >
+          <Text style={[styles.filterText, selectedFilter === 'all' && styles.activeFilterText]}>Todos</Text>
+        </TouchableOpacity>
+        <TouchableOpacity 
+          style={[styles.filterChip, selectedFilter === 'confirmado' && styles.activeFilter]}
+          onPress={() => setSelectedFilter('confirmado')}
+        >
+          <Text style={[styles.filterText, selectedFilter === 'confirmado' && styles.activeFilterText]}>Completados</Text>
+        </TouchableOpacity>
+        <TouchableOpacity 
+          style={[styles.filterChip, selectedFilter === 'pendiente' && styles.activeFilter]}
+          onPress={() => setSelectedFilter('pendiente')}
+        >
+          <Text style={[styles.filterText, selectedFilter === 'pendiente' && styles.activeFilterText]}>Pendientes</Text>
+        </TouchableOpacity>
+      </View>
+
+      {loading && !refreshing ? (
+        <ActivityIndicator size="large" color="#007bff" style={{ marginTop: 20 }} />
+      ) : (
+        <FlatList
+          data={payments}
+          renderItem={renderItem}
+          keyExtractor={(item) => item.id}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
+          }
+          contentContainerStyle={styles.listContent}
+          ListEmptyComponent={
+            <Text style={styles.emptyText}>No hay pagos registrados</Text>
+          }
+        />
+      )}
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
+  // ESTILOS NUEVOS PARA EL TÍTULO MANUAL
+  headerContainer: {
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 8,
   },
-  centerContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+  screenTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  
+  summaryContainer: {
+    flexDirection: 'row',
+    padding: 16,
+    justifyContent: 'space-between',
   },
   summaryCard: {
-    flexDirection: 'row',
-    backgroundColor: '#fff',
-    borderRadius: 12,
+    backgroundColor: 'white',
     padding: 16,
-    marginHorizontal: 16,
-    marginVertical: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
+    borderRadius: 12,
+    width: '48%',
     elevation: 2,
-  },
-  summaryItem: {
-    flex: 1,
     alignItems: 'center',
-  },
-  summaryDivider: {
-    width: 1,
-    backgroundColor: '#EEE',
-    marginHorizontal: 16,
   },
   summaryLabel: {
     fontSize: 12,
     color: '#666',
     marginBottom: 4,
   },
-  summaryAmount: {
+  summaryValue: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#007bff',
   },
-  summarySubtext: {
-    fontSize: 10,
-    color: '#888',
-    marginTop: 2,
-  },
-  dateFilterContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    marginBottom: 12,
-    justifyContent: 'center',
-  },
-  dateButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#fff',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#eee',
-    minWidth: 100,
-    justifyContent: 'center',
-  },
-  dateButtonText: {
-    marginLeft: 6,
-    color: '#333',
-    fontSize: 14,
-  },
-  dateSeparator: {
-    marginHorizontal: 8,
-    color: '#666',
-  },
-  clearDateButton: {
-    marginLeft: 12,
-    padding: 4,
-  },
-  filterContainer: {
+  filtersContainer: {
     flexDirection: 'row',
     paddingHorizontal: 16,
+    marginBottom: 10,
+  },
+  filterChip: {
+    paddingHorizontal: 16,
     paddingVertical: 8,
-    backgroundColor: '#fff',
-    marginHorizontal: 16,
-    borderRadius: 8,
-    marginBottom: 12,
+    borderRadius: 20,
+    backgroundColor: '#f0f0f0',
+    marginRight: 8,
   },
-  filterButton: {
-    flex: 1,
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-    borderRadius: 6,
-    marginHorizontal: 2,
-    backgroundColor: '#F5F5F5',
-    alignItems: 'center',
-  },
-  filterButtonActive: {
+  activeFilter: {
     backgroundColor: '#007bff',
   },
-  filterButtonText: {
-    fontSize: 12,
+  filterText: {
     color: '#666',
     fontWeight: '500',
   },
-  filterButtonTextActive: {
-    color: '#fff',
+  activeFilterText: {
+    color: 'white',
   },
   listContent: {
-    paddingHorizontal: 16,
-    paddingBottom: 16,
+    padding: 16,
+    paddingTop: 0,
   },
-  paymentCard: {
-    backgroundColor: '#fff',
+  card: {
+    backgroundColor: 'white',
     borderRadius: 12,
+    padding: 16,
     marginBottom: 12,
-    overflow: 'hidden',
+    elevation: 2,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
+    shadowOpacity: 0.1,
     shadowRadius: 2,
-    elevation: 1,
   },
-  paymentHeader: {
+  cardHeader: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 12,
   },
-  paymentInfo: {
+  iconContainer: {
+    marginRight: 12,
+  },
+  iconBg: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  cardInfo: {
     flex: 1,
   },
-  paymentAmount: {
-    fontSize: 16,
+  amount: {
+    fontSize: 18,
     fontWeight: 'bold',
     color: '#333',
-    marginBottom: 4,
   },
-  paymentMeta: {
-    fontSize: 13,
+  userText: {
+    fontSize: 14,
     color: '#666',
-    marginBottom: 2,
+    marginTop: 2,
   },
-  paymentDate: {
+  dateText: {
     fontSize: 12,
     color: '#999',
+    marginTop: 2,
   },
-  paymentRight: {
+  statusContainer: {
     alignItems: 'flex-end',
-    marginLeft: 12,
   },
   statusBadge: {
-    paddingHorizontal: 10,
+    paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 4,
-    marginBottom: 8,
+    borderRadius: 6,
   },
   statusText: {
-    color: '#fff',
-    fontSize: 11,
+    color: 'white',
+    fontSize: 10,
     fontWeight: 'bold',
   },
-  paymentDetails: {
-    backgroundColor: '#F9F9F9',
-    paddingHorizontal: 12,
-    paddingVertical: 12,
+  detailsContainer: {
+    marginTop: 16,
+    paddingTop: 16,
     borderTopWidth: 1,
-    borderTopColor: '#EEE',
+    borderTopColor: '#f0f0f0',
   },
   detailRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginBottom: 8,
-    paddingBottom: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: '#EEE',
   },
   detailLabel: {
     fontSize: 12,
-    color: '#666',
-    fontWeight: '600',
+    color: '#999',
   },
   detailValue: {
     fontSize: 12,
     color: '#333',
-    flex: 1,
+    fontWeight: '500',
+    maxWidth: '70%',
     textAlign: 'right',
   },
-  actionButton: {
+  actionsRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#4CAF50',
+    justifyContent: 'flex-end',
+    marginTop: 12,
+  },
+  actionButton: {
+    paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 6,
-    marginTop: 8,
+    marginLeft: 8,
   },
-  actionButtonDanger: {
-    backgroundColor: '#F44336',
-  },
-  actionButtonText: {
-    color: '#fff',
+  actionText: {
+    color: 'white',
     fontSize: 12,
     fontWeight: '600',
-    marginLeft: 6,
   },
   emptyText: {
-    fontSize: 14,
+    textAlign: 'center',
+    marginTop: 40,
     color: '#999',
-    marginTop: 12,
   },
 });

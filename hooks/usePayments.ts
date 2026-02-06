@@ -1,13 +1,15 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Alert } from 'react-native';
-import paymentService from '../services/paymentService';
-import { Payment } from '../types';
+import paymentService, { Payment, PaymentStatus } from '../services/paymentService';
 
 export function usePayments() {
   const [payments, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [selectedFilter, setSelectedFilter] = useState<'all' | 'confirmado' | 'incompleto' | 'cancelado'>('all');
+  
+  // Filtro visual para el usuario
+  const [selectedFilter, setSelectedFilter] = useState<'all' | 'confirmado' | 'pendiente' | 'fallido'>('all');
+  
   const [totalAmount, setTotalAmount] = useState(0);
   const [startDate, setStartDate] = useState<Date | null>(null);
   const [endDate, setEndDate] = useState<Date | null>(null);
@@ -15,51 +17,36 @@ export function usePayments() {
   const loadPayments = useCallback(async () => {
     try {
       setLoading(true);
-      // Fetch all payments to calculate global total correctly
       const allData = await paymentService.getAllPayments({});
       const allPayments = allData || [];
       
-      // Calculate total amount of confirmed payments from ALL data
+      // 1. Calcular total histórico de pagos COMPLETADOS
       const confirmed = allPayments.filter(p => {
-        const status = p.estado?.toUpperCase();
-        return status === 'CONFIRMADO' || status === 'COMPLETADO';
+        // Normalizamos comparación (Backend envía 'Completado')
+        return p.estado === PaymentStatus.COMPLETED || p.estado === 'Completado';
       });
-      const total = confirmed.reduce((sum, p) => sum + (p.monto || 0), 0);
+      
+      const total = confirmed.reduce((sum, p) => sum + (Number(p.monto) || 0), 0);
       setTotalAmount(total);
 
-      // Filter for display based on selection
+      // 2. Filtrar para mostrar en lista
       let displayData = allPayments;
+
       if (selectedFilter !== 'all') {
-        const targetStatus = selectedFilter.toUpperCase();
-        displayData = allPayments.filter(p => {
-          const status = p.estado?.toUpperCase();
-          if (targetStatus === 'CONFIRMADO') {
-            return status === 'CONFIRMADO' || status === 'COMPLETADO';
-          }
-          if (targetStatus === 'INCOMPLETO') {
-            return status === 'INCOMPLETO' || status === 'PENDIENTE';
-          }
-          return status === targetStatus;
+        displayData = displayData.filter(p => {
+          const status = p.estado;
+          if (selectedFilter === 'confirmado') return status === PaymentStatus.COMPLETED || status === 'Completado';
+          if (selectedFilter === 'pendiente') return status === PaymentStatus.PENDING || status === 'Pendiente';
+          if (selectedFilter === 'fallido') return status === PaymentStatus.FAILED || status === 'Fallido';
+          return true;
         });
       }
 
-      // Filter by Date Range
-      if (startDate || endDate) {
+      // Filtro de Fechas
+      if (startDate && endDate) {
         displayData = displayData.filter(p => {
           const pDate = new Date(p.fechaCreacion);
-          // normalize to start of day
-          const checkDate = new Date(pDate.getFullYear(), pDate.getMonth(), pDate.getDate());
-          
-          if (startDate) {
-            const start = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
-            if (checkDate < start) return false;
-          }
-          
-          if (endDate) {
-            const end = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
-            if (checkDate > end) return false;
-          }
-          return true;
+          return pDate >= startDate && pDate <= endDate;
         });
       }
 
@@ -88,20 +75,19 @@ export function usePayments() {
   const updatePaymentStatus = async (paymentId: string, newStatus: string) => {
     try {
       const updated = await paymentService.updatePaymentStatus(paymentId, newStatus);
+      
+      // Actualizamos la lista localmente
       const newPayments = payments.map(p => p.id === paymentId ? updated : p);
       setPayments(newPayments);
       
-      // We also need to update the total if the status changed to confirmed
-      if (newStatus === 'Confirmado') {
-         // Re-run load to recalc totals simplified or just manual update?
-         // Simplest is to let loadPayments run again or manual update:
-         // But logic is complex with filters. Let's just reload.
+      // Si cambió a completado, recargamos para actualizar el total monetario
+      if (newStatus === PaymentStatus.COMPLETED) {
          loadPayments(); 
       }
       
-      Alert.alert('Éxito', 'Estado del pago actualizado');
+      Alert.alert('Éxito', 'Estado actualizado correctamente');
     } catch (error) {
-      Alert.alert('Error', 'No se pudo actualizar el estado del pago');
+      Alert.alert('Error', 'No se pudo actualizar el estado');
     }
   };
 
@@ -118,6 +104,5 @@ export function usePayments() {
     setEndDate,
     onRefresh,
     updatePaymentStatus,
-    loadPayments,
   };
 }
