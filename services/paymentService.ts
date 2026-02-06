@@ -1,7 +1,9 @@
 import apiService from './apiService';
+// 👇 IMPORTANTE: Importamos la interfaz desde tus tipos globales para evitar conflictos
+import { MechanicPayment } from '../types'; 
 
 // ==========================================
-// 1. INTERFACES EXACTAS AL BACKEND
+// 1. INTERFACES Y ENUMS PROPIOS DEL SERVICIO
 // ==========================================
 
 export enum PaymentStatus {
@@ -22,10 +24,10 @@ export interface Payment {
   id: string;
   usuarioId: string;
   monto: number;
-  estado: PaymentStatus | string; // Permitimos string por si llega texto plano
+  estado: PaymentStatus | string;
   metodo: PaymentMethod | string;
-  detalles?: string;       // En BD es referenciaExterna
-  idempotencyKey?: string; // Aquí viaja el token Webpay
+  detalles?: string;       
+  idempotencyKey?: string; 
   fechaCreacion: string;
   usuario?: any;
 }
@@ -41,19 +43,14 @@ export interface InitiateWebpayResponse {
 // 2. MAPEOS VISUALES (UI)
 // ==========================================
 
-// Normalizamos para manejar variaciones mayúsculas/minúsculas
 const normalizeKey = (key?: string) => key?.trim();
 
+// ✅ CORREGIDO: Sin claves duplicadas
 const STATUS_COLOR_MAP: Record<string, string> = {
   [PaymentStatus.COMPLETED]: '#4CAF50', // Verde
   [PaymentStatus.PENDING]: '#FF9800',   // Naranja
   [PaymentStatus.FAILED]: '#F44336',    // Rojo
   [PaymentStatus.REFUNDED]: '#2196F3',  // Azul
-  // Compatibilidad hacia atrás (por si acaso)
-  'CONFIRMADO': '#4CAF50',
-  'PENDIENTE': '#FF9800',
-  'COMPLETADO': '#4CAF50',
-  'FALLIDO': '#F44336',
 };
 
 const STATUS_LABEL_MAP: Record<string, string> = {
@@ -65,7 +62,7 @@ const STATUS_LABEL_MAP: Record<string, string> = {
 
 const PaymentService = {
   /**
-   * Obtiene todos los pagos (historial)
+   * Obtiene todos los pagos (historial general)
    */
   async getAllPayments(filters?: any): Promise<Payment[]> {
     try {
@@ -82,8 +79,24 @@ const PaymentService = {
   },
 
   /**
-   * 🚀 INICIAR PAGO WEBPAY (NUEVO)
-   * Llama al backend para obtener URL y Token
+   * 🟢 Obtiene los pagos de un mecánico
+   * Retorna MechanicPayment[] importado de types
+   */
+  async getMechanicPayouts(mechanicId: string): Promise<MechanicPayment[]> {
+    try {
+      const response = await apiService.fetch(`/payments/mechanic/${mechanicId}`, {
+        method: 'GET',
+        requiresAuth: true,
+      });
+      return response || [];
+    } catch (error) {
+      console.error('Error fetching mechanic payouts:', error);
+      return [];
+    }
+  },
+
+  /**
+   * 🚀 INICIAR PAGO WEBPAY
    */
   async initiateWebpay(monto: number, usuarioId: string, detalles: string = 'Pago Servicio'): Promise<InitiateWebpayResponse> {
     try {
@@ -121,7 +134,7 @@ const PaymentService = {
   async updatePaymentStatus(id: string, estado: string): Promise<Payment> {
     try {
       const response = await apiService.fetch(`/payments/${id}`, {
-        method: 'PATCH', // Usamos PATCH según tu controller
+        method: 'PATCH',
         requiresAuth: true,
         body: JSON.stringify({ estado }),
       });
@@ -140,7 +153,7 @@ const PaymentService = {
         currency: 'CLP', 
         maximumFractionDigits: 0 
       }).format(amount);
-      return formatted.replace(/CLP\s?/, '').trim(); // Quitamos "CLP" si aparece
+      return formatted.replace(/CLP\s?/, '').trim();
     } catch {
       return `$${amount}`;
     }
@@ -148,7 +161,6 @@ const PaymentService = {
 
   getStatusColor(estado?: string): string {
     const nk = normalizeKey(estado);
-    // Buscamos exacto o devolvemos gris
     return STATUS_COLOR_MAP[nk] || STATUS_COLOR_MAP[nk?.charAt(0).toUpperCase() + nk?.slice(1).toLowerCase()!] || '#999';
   },
 
