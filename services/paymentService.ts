@@ -1,12 +1,8 @@
 import apiService from './apiService';
-// 👇 ESTA LÍNEA ES CLAVE: Importamos la interfaz de tus tipos globales
-// para que coincida exactamente con lo que espera tu pantalla.
+// Importamos tipos globales si existen, si no, usamos los locales definidos abajo
 import { MechanicPayment } from '../types'; 
 
-// ==========================================
-// 1. ENUMS Y TIPOS LOCALES (Solo lo que no está en global)
-// ==========================================
-
+// --- Enum y Tipos Locales ---
 export enum PaymentStatus {
   PENDING = 'Pendiente',
   COMPLETED = 'Completado',
@@ -21,55 +17,40 @@ export enum PaymentMethod {
   SALDO_AUTOBOX = 'Saldo AutoBox',
 }
 
-// Interfaz para la respuesta de inicio de Webpay
-export interface InitiateWebpayResponse {
-  paymentId: string;
-  url: string;
-  token: string;
-  amount: number;
-}
-
-// Interfaz básica de Pago (si no existe en types global, la usamos aquí)
 export interface Payment {
   id: string;
   usuarioId: string;
   monto: number;
   estado: PaymentStatus | string;
   metodo: PaymentMethod | string;
-  detalles?: string;       
+  detalles?: string;
   fechaCreacion: string;
   usuario?: any;
+  // Agregamos campos opcionales para evitar errores de typescript en la UI
+  created_at?: string; 
+  mecanico_id?: string;
 }
 
-// ==========================================
-// 2. CONFIGURACIÓN VISUAL (Colores y Etiquetas)
-// ==========================================
+export interface InitiateWebpayResponse {
+  token: string;
+  url: string;
+  amount: number;
+  paymentId?: string; // ID interno de tu BD
+}
 
-const normalizeKey = (key?: string) => key?.trim();
-
-// ✅ CORREGIDO: Sin claves duplicadas. Usamos el Enum como llave única.
+// --- Configuración Visual ---
 const STATUS_COLOR_MAP: Record<string, string> = {
-  [PaymentStatus.COMPLETED]: '#4CAF50', // Verde
-  [PaymentStatus.PENDING]: '#FF9800',   // Naranja
-  [PaymentStatus.FAILED]: '#F44336',    // Rojo
-  [PaymentStatus.REFUNDED]: '#2196F3',  // Azul
+  [PaymentStatus.COMPLETED]: '#4CAF50',
+  [PaymentStatus.PENDING]: '#FF9800',
+  [PaymentStatus.FAILED]: '#F44336',
+  [PaymentStatus.REFUNDED]: '#2196F3',
+  'CONFIRMADO': '#4CAF50', // Mapas extra por si el backend varía
+  'INCOMPLETO': '#FF9800'
 };
-
-const STATUS_LABEL_MAP: Record<string, string> = {
-  [PaymentStatus.COMPLETED]: 'Completado',
-  [PaymentStatus.PENDING]: 'Pendiente',
-  [PaymentStatus.FAILED]: 'Fallido',
-  [PaymentStatus.REFUNDED]: 'Reembolsado',
-};
-
-// ==========================================
-// 3. EL SERVICIO (Lógica de Negocio)
-// ==========================================
 
 const PaymentService = {
-  /**
-   * Obtiene todos los pagos (historial general)
-   */
+  
+  // 1. Obtener todos los pagos (Historial)
   async getAllPayments(filters?: any): Promise<Payment[]> {
     try {
       const query = filters ? new URLSearchParams(filters).toString() : '';
@@ -84,35 +65,57 @@ const PaymentService = {
     }
   },
 
-  /**
-   * 🟢 Obtiene los pagos de un mecánico específico
-   * Retorna MechanicPayment[] importado de types para evitar conflictos.
-   */
+  // 2. Obtener pagos de mecánicos (CON TRADUCCIÓN DE TIPOS)
   async getMechanicPayouts(mechanicId: string): Promise<MechanicPayment[]> {
     try {
-      const response = await apiService.fetch(`/payments/mechanic/${mechanicId}`, {
+      const rawData = await apiService.fetch(`/payments/mechanic/${mechanicId}`, {
         method: 'GET',
         requiresAuth: true,
       });
-      return response || [];
+
+      if (!rawData) return [];
+
+      // Mapeo defensivo: Backend (camel) -> Frontend (snake)
+      return rawData.map((item: any) => ({
+        id: item.id,
+        monto: Number(item.monto),
+        fecha_pago: item.fechaCreacion || item.fecha_pago,
+        nota: item.detalles || item.nota || 'Sin detalles',
+        comprobante_url: item.comprobante_url || null,
+        tipo: item.tipo || 'PAGO', 
+        
+        // Aquí arreglamos el error rojo de "Faltan propiedades"
+        mecanico_id: item.usuario?.id || mechanicId,
+        created_at: item.fechaCreacion || new Date().toISOString(),
+        updated_at: item.fechaActualizacion || new Date().toISOString(),
+        
+        // Mapeo de estado para evitar undefined
+        estado: item.estado || 'Pendiente'
+      }));
+
     } catch (error) {
       console.error('Error fetching mechanic payouts:', error);
       return [];
     }
   },
 
-  /**
-   * 🚀 INICIAR PAGO WEBPAY
-   * Esta es la función que usarás para integrar la pasarela.
-   */
+  // 3. Iniciar Webpay (Llama a tu Backend Principal)
   async initiateWebpay(monto: number, usuarioId: string, detalles: string = 'Pago Servicio'): Promise<InitiateWebpayResponse> {
     try {
+      console.log('Iniciando Webpay:', { monto, usuarioId });
+      
       const response = await apiService.post('/payments/webpay/init', {
         monto,
         usuarioId,
         detalles,
         metodo: PaymentMethod.WEBPAY
       });
+      
+      // Verificación clave: Transbank necesita URL y Token
+      if (!response.url || !response.token) {
+        throw new Error('Respuesta inválida del servidor de pagos');
+      }
+
       return response;
     } catch (error) {
       console.error('Error iniciando Webpay:', error);
@@ -120,9 +123,7 @@ const PaymentService = {
     }
   },
 
-  /**
-   * Obtiene resumen financiero (Dashboard)
-   */
+  // 4. Resumen Financiero
   async getFinancialSummary() {
     try {
       return await apiService.fetch('/payments/summary/financial', {
@@ -130,56 +131,31 @@ const PaymentService = {
         requiresAuth: true,
       });
     } catch (error) {
-      console.error('Error fetching financial summary:', error);
       return { totalConfirmed: 0, totalUserBalance: 0, totalMechanicWithdrawals: 0 };
     }
   },
 
-  /**
-   * Actualiza estado de un pago (Admin)
-   */
-  async updatePaymentStatus(id: string, estado: string): Promise<Payment> {
-    try {
-      const response = await apiService.fetch(`/payments/${id}`, {
-        method: 'PATCH',
-        requiresAuth: true,
-        body: JSON.stringify({ estado }),
-      });
-      return response;
-    } catch (error) {
-      console.error('Error updating payment status:', error);
-      throw error;
-    }
-  },
-
-  // ==========================================
-  // 4. HELPERS DE FORMATO
-  // ==========================================
-
+  // 5. Helpers Visuales
   formatCurrency(amount: number): string {
+    if (amount === undefined || amount === null) return '$0';
     try {
-      const formatted = new Intl.NumberFormat('es-CL', { 
-        style: 'currency', 
-        currency: 'CLP', 
-        maximumFractionDigits: 0 
-      }).format(amount);
-      return formatted.replace(/CLP\s?/, '').trim();
+      return '$' + amount.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
     } catch {
       return `$${amount}`;
     }
   },
 
   getStatusColor(estado?: string): string {
-    const nk = normalizeKey(estado);
-    // Intenta buscar exacto, o capitalizado (ej: "pendiente" -> "Pendiente")
-    const key = nk ? (STATUS_COLOR_MAP[nk] ? nk : nk.charAt(0).toUpperCase() + nk.slice(1).toLowerCase()) : '';
-    return STATUS_COLOR_MAP[key] || '#999';
+    if (!estado) return '#999';
+    // Normalizar a mayúsculas o capitalizado para buscar en el mapa
+    const key = estado.toUpperCase();
+    // Búsqueda flexible
+    const found = Object.keys(STATUS_COLOR_MAP).find(k => k.toUpperCase() === key);
+    return found ? STATUS_COLOR_MAP[found] : '#999';
   },
 
   getStatusLabel(estado?: string): string {
-    const nk = normalizeKey(estado);
-    const key = nk ? (STATUS_LABEL_MAP[nk] ? nk : nk.charAt(0).toUpperCase() + nk.slice(1).toLowerCase()) : '';
-    return STATUS_LABEL_MAP[key] || estado || 'Desconocido';
+    return estado || 'Desconocido';
   }
 };
 
