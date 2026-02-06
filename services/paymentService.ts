@@ -1,9 +1,10 @@
 import apiService from './apiService';
-// 👇 IMPORTANTE: Importamos la interfaz desde tus tipos globales para evitar conflictos
+// 👇 ESTA LÍNEA ES CLAVE: Importamos la interfaz de tus tipos globales
+// para que coincida exactamente con lo que espera tu pantalla.
 import { MechanicPayment } from '../types'; 
 
 // ==========================================
-// 1. INTERFACES Y ENUMS PROPIOS DEL SERVICIO
+// 1. ENUMS Y TIPOS LOCALES (Solo lo que no está en global)
 // ==========================================
 
 export enum PaymentStatus {
@@ -20,18 +21,7 @@ export enum PaymentMethod {
   SALDO_AUTOBOX = 'Saldo AutoBox',
 }
 
-export interface Payment {
-  id: string;
-  usuarioId: string;
-  monto: number;
-  estado: PaymentStatus | string;
-  metodo: PaymentMethod | string;
-  detalles?: string;       
-  idempotencyKey?: string; 
-  fechaCreacion: string;
-  usuario?: any;
-}
-
+// Interfaz para la respuesta de inicio de Webpay
 export interface InitiateWebpayResponse {
   paymentId: string;
   url: string;
@@ -39,13 +29,25 @@ export interface InitiateWebpayResponse {
   amount: number;
 }
 
+// Interfaz básica de Pago (si no existe en types global, la usamos aquí)
+export interface Payment {
+  id: string;
+  usuarioId: string;
+  monto: number;
+  estado: PaymentStatus | string;
+  metodo: PaymentMethod | string;
+  detalles?: string;       
+  fechaCreacion: string;
+  usuario?: any;
+}
+
 // ==========================================
-// 2. MAPEOS VISUALES (UI)
+// 2. CONFIGURACIÓN VISUAL (Colores y Etiquetas)
 // ==========================================
 
 const normalizeKey = (key?: string) => key?.trim();
 
-// ✅ CORREGIDO: Sin claves duplicadas
+// ✅ CORREGIDO: Sin claves duplicadas. Usamos el Enum como llave única.
 const STATUS_COLOR_MAP: Record<string, string> = {
   [PaymentStatus.COMPLETED]: '#4CAF50', // Verde
   [PaymentStatus.PENDING]: '#FF9800',   // Naranja
@@ -59,6 +61,10 @@ const STATUS_LABEL_MAP: Record<string, string> = {
   [PaymentStatus.FAILED]: 'Fallido',
   [PaymentStatus.REFUNDED]: 'Reembolsado',
 };
+
+// ==========================================
+// 3. EL SERVICIO (Lógica de Negocio)
+// ==========================================
 
 const PaymentService = {
   /**
@@ -79,8 +85,8 @@ const PaymentService = {
   },
 
   /**
-   * 🟢 Obtiene los pagos de un mecánico
-   * Retorna MechanicPayment[] importado de types
+   * 🟢 Obtiene los pagos de un mecánico específico
+   * Retorna MechanicPayment[] importado de types para evitar conflictos.
    */
   async getMechanicPayouts(mechanicId: string): Promise<MechanicPayment[]> {
     try {
@@ -97,6 +103,7 @@ const PaymentService = {
 
   /**
    * 🚀 INICIAR PAGO WEBPAY
+   * Esta es la función que usarás para integrar la pasarela.
    */
   async initiateWebpay(monto: number, usuarioId: string, detalles: string = 'Pago Servicio'): Promise<InitiateWebpayResponse> {
     try {
@@ -114,7 +121,7 @@ const PaymentService = {
   },
 
   /**
-   * Obtiene resumen financiero
+   * Obtiene resumen financiero (Dashboard)
    */
   async getFinancialSummary() {
     try {
@@ -129,7 +136,7 @@ const PaymentService = {
   },
 
   /**
-   * Actualiza estado (Admin)
+   * Actualiza estado de un pago (Admin)
    */
   async updatePaymentStatus(id: string, estado: string): Promise<Payment> {
     try {
@@ -145,7 +152,10 @@ const PaymentService = {
     }
   },
 
-  // Helpers de Formato
+  // ==========================================
+  // 4. HELPERS DE FORMATO
+  // ==========================================
+
   formatCurrency(amount: number): string {
     try {
       const formatted = new Intl.NumberFormat('es-CL', { 
@@ -161,12 +171,15 @@ const PaymentService = {
 
   getStatusColor(estado?: string): string {
     const nk = normalizeKey(estado);
-    return STATUS_COLOR_MAP[nk] || STATUS_COLOR_MAP[nk?.charAt(0).toUpperCase() + nk?.slice(1).toLowerCase()!] || '#999';
+    // Intenta buscar exacto, o capitalizado (ej: "pendiente" -> "Pendiente")
+    const key = nk ? (STATUS_COLOR_MAP[nk] ? nk : nk.charAt(0).toUpperCase() + nk.slice(1).toLowerCase()) : '';
+    return STATUS_COLOR_MAP[key] || '#999';
   },
 
   getStatusLabel(estado?: string): string {
     const nk = normalizeKey(estado);
-    return STATUS_LABEL_MAP[nk] || estado || 'Desconocido';
+    const key = nk ? (STATUS_LABEL_MAP[nk] ? nk : nk.charAt(0).toUpperCase() + nk.slice(1).toLowerCase()) : '';
+    return STATUS_LABEL_MAP[key] || estado || 'Desconocido';
   }
 };
 
