@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Alert } from 'react-native';
+// Asegúrate de importar PaymentStatus aquí
 import paymentService, { Payment, PaymentStatus } from '../services/paymentService';
 
 export function usePayments() {
@@ -17,36 +18,40 @@ export function usePayments() {
   const loadPayments = useCallback(async () => {
     try {
       setLoading(true);
-      const allData = await paymentService.getAllPayments({});
+      
+      // CORRECCIÓN 1: Quitamos el argumento {}. 
+      // getAllPayments() ahora no pide nada.
+      const allData = await paymentService.getAllPayments();
+      
       const allPayments = allData || [];
       
       // 1. Calcular total histórico de pagos COMPLETADOS
       const confirmed = allPayments.filter(p => {
-        // Normalizamos comparación (Backend envía 'Completado')
-        return p.estado === PaymentStatus.COMPLETED || p.estado === 'Completado';
+        const status = typeof p.estado === 'string' ? p.estado.toUpperCase() : '';
+        return status === 'COMPLETADO' || status === 'COMPLETED' || p.estado === PaymentStatus.COMPLETED;
       });
       
       const total = confirmed.reduce((sum, p) => sum + (Number(p.monto) || 0), 0);
       setTotalAmount(total);
 
-      // 2. Filtrar para mostrar en lista
+      // 2. Filtrar para la lista visual
       let displayData = allPayments;
 
       if (selectedFilter !== 'all') {
         displayData = displayData.filter(p => {
-          const status = p.estado;
-          if (selectedFilter === 'confirmado') return status === PaymentStatus.COMPLETED || status === 'Completado';
-          if (selectedFilter === 'pendiente') return status === PaymentStatus.PENDING || status === 'Pendiente';
-          if (selectedFilter === 'fallido') return status === PaymentStatus.FAILED || status === 'Fallido';
-          return true;
+            const status = typeof p.estado === 'string' ? p.estado.toUpperCase() : '';
+            if (selectedFilter === 'confirmado') return status.includes('COMPLET');
+            if (selectedFilter === 'pendiente') return status.includes('PEND');
+            if (selectedFilter === 'fallido') return status.includes('FALL') || status.includes('FAIL');
+            return true;
         });
       }
 
-      // Filtro de Fechas
+      // 3. Filtro de Fechas (Opcional)
       if (startDate && endDate) {
         displayData = displayData.filter(p => {
-          const pDate = new Date(p.fechaCreacion);
-          return pDate >= startDate && pDate <= endDate;
+            const pDate = new Date(p.fechaCreacion);
+            return pDate >= startDate && pDate <= endDate;
         });
       }
 
@@ -72,21 +77,26 @@ export function usePayments() {
     }
   };
 
-  const updatePaymentStatus = async (paymentId: string, newStatus: string) => {
+  // CORRECCIÓN 2: Cambiamos el tipo de newStatus de string a PaymentStatus
+  // Esto arregla el error de asignación.
+  const updatePaymentStatus = async (paymentId: string, newStatus: PaymentStatus) => {
     try {
       const updated = await paymentService.updatePaymentStatus(paymentId, newStatus);
       
-      // Actualizamos la lista localmente
-      const newPayments = payments.map(p => p.id === paymentId ? updated : p);
-      setPayments(newPayments);
-      
-      // Si cambió a completado, recargamos para actualizar el total monetario
-      if (newStatus === PaymentStatus.COMPLETED) {
-         loadPayments(); 
+      if (updated) {
+        // Actualizamos la lista localmente
+        const newPayments = payments.map(p => p.id === paymentId ? updated : p);
+        setPayments(newPayments);
+        
+        // Si cambió a completado, recargamos todo para actualizar el total monetario correctamente
+        if (newStatus === PaymentStatus.COMPLETED) {
+           loadPayments(); 
+        } else {
+           Alert.alert('Éxito', 'Estado actualizado correctamente');
+        }
       }
-      
-      Alert.alert('Éxito', 'Estado actualizado correctamente');
     } catch (error) {
+      console.error(error);
       Alert.alert('Error', 'No se pudo actualizar el estado');
     }
   };
@@ -95,6 +105,7 @@ export function usePayments() {
     payments,
     loading,
     refreshing,
+    onRefresh,
     selectedFilter,
     setSelectedFilter,
     totalAmount,
@@ -102,7 +113,6 @@ export function usePayments() {
     setStartDate,
     endDate,
     setEndDate,
-    onRefresh,
-    updatePaymentStatus,
+    updatePaymentStatus
   };
 }

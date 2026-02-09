@@ -7,7 +7,6 @@ import {
   ActivityIndicator,
   RefreshControl,
   TouchableOpacity,
-  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Screen } from '../../components/ui/Screen';
@@ -15,27 +14,25 @@ import { usePayments } from '../../hooks/usePayments';
 import paymentService, { Payment, PaymentStatus } from '../../services/paymentService';
 
 export default function PaymentsScreen() {
+  // Hook personalizado que maneja la lógica de carga
   const {
     payments,
     loading,
     refreshing,
-    selectedFilter,
-    setSelectedFilter,
-    onRefresh: refreshPaymentsList, // Renombramos la del hook para usarla en nuestro wrapper
+    onRefresh: refreshPaymentsList,
     updatePaymentStatus,
-    totalAmount
   } = usePayments();
 
   const [expandedId, setExpandedId] = useState<string | null>(null);
   
-  // Estado local para los totales (Resumen financiero)
+  // Estado para el resumen financiero
   const [financialSummary, setFinancialSummary] = useState({ 
     totalConfirmed: 0, 
     totalUserBalance: 0, 
     totalMechanicWithdrawals: 0 
   });
 
-  // Cargar resumen al montar
+  // Cargar resumen financiero al montar la pantalla
   useEffect(() => {
      loadFinancialSummary();
   }, []);
@@ -43,29 +40,34 @@ export default function PaymentsScreen() {
   const loadFinancialSummary = async () => {
      try {
        const summary = await paymentService.getFinancialSummary();
-       setFinancialSummary(summary);
+       if (summary) {
+         setFinancialSummary(summary);
+       }
      } catch (error) {
-       console.log('Error cargando resumen', error);
+       console.log('Error cargando resumen financiero (no crítico):', error);
      }
   };
 
-  // 🔄 Wrapper para actualizar TODO (Lista + Resumen) al deslizar
-  const handleRefresh = async () => {
-    // 1. Recargar resumen financiero
-    loadFinancialSummary();
-    // 2. Recargar lista de pagos (del hook)
-    await refreshPaymentsList();
-  };
-
   const toggleExpand = (id: string) => {
-    setExpandedId(expandedId === id ? null : id);
+    setExpandedId(prev => prev === id ? null : id);
   };
 
   const renderItem = ({ item }: { item: Payment }) => {
     const isExpanded = expandedId === item.id;
     const statusColor = paymentService.getStatusColor(item.estado);
-    const date = new Date(item.fechaCreacion).toLocaleDateString('es-CL');
     
+    // Formateo de fecha seguro
+    let dateFormatted = 'Fecha desconocida';
+    try {
+        if (item.fechaCreacion) {
+            dateFormatted = new Date(item.fechaCreacion).toLocaleDateString('es-CL', {
+                day: '2-digit', month: 'short', year: 'numeric'
+            });
+        }
+    } catch (e) {
+        console.log('Error formateando fecha', e);
+    }
+
     return (
       <TouchableOpacity 
         style={styles.card} 
@@ -88,7 +90,7 @@ export default function PaymentsScreen() {
             <Text style={styles.userText}>
               {item.usuario?.nombre ? `${item.usuario.nombre} ${item.usuario.apellido}` : 'Usuario'}
             </Text>
-            <Text style={styles.dateText}>{date} • {item.metodo}</Text>
+            <Text style={styles.dateText}>{dateFormatted} • {item.metodo}</Text>
           </View>
 
           <View style={styles.statusContainer}>
@@ -109,23 +111,25 @@ export default function PaymentsScreen() {
         {isExpanded && (
           <View style={styles.detailsContainer}>
             <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>ID Transacción (Webpay):</Text>
-              {/* Mostramos el token/idempotencyKey si existe */}
-              <Text style={styles.detailValue}>{item.idempotencyKey || 'N/A'}</Text>
+              <Text style={styles.detailLabel}>ID Transacción:</Text>
+              {/* Uso de 'any' para evitar errores de tipado estricto si la propiedad no existe en la interfaz */}
+              <Text style={styles.detailValue}>
+                {(item as any).idempotencyKey || (item as any).token || 'N/A'}
+              </Text>
             </View>
             
             <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Detalle (Orden):</Text>
+              <Text style={styles.detailLabel}>Detalle:</Text>
               <Text style={styles.detailValue}>{item.detalles || 'Sin detalles'}</Text>
             </View>
 
             <View style={styles.actionsRow}>
-                {/* Botón Manual solo si está Pendiente */}
                 {item.estado === PaymentStatus.PENDING && (
                   <TouchableOpacity 
                     style={[styles.actionButton, { backgroundColor: '#4CAF50' }]}
                     onPress={() => updatePaymentStatus(item.id, PaymentStatus.COMPLETED)}
                   >
+                    <Ionicons name="checkmark-circle-outline" size={18} color="#fff" />
                     <Text style={styles.actionText}>Marcar Completado</Text>
                   </TouchableOpacity>
                 )}
@@ -137,61 +141,44 @@ export default function PaymentsScreen() {
   };
 
   return (
+    // CAMBIO AQUI: Eliminamos la prop 'title' que daba error
     <Screen>
-      {/* 👇 AQUÍ REEMPLAZAMOS LA FUNCIÓN 'title' POR UN HEADER MANUAL 👇 */}
+      
+      {/* Título manual agregado visualmente */}
       <View style={styles.headerContainer}>
         <Text style={styles.screenTitle}>Gestión de Pagos</Text>
       </View>
-
+      
+      {/* Resumen Financiero */}
       <View style={styles.summaryContainer}>
-        <View style={styles.summaryCard}>
-            <Text style={styles.summaryLabel}>Total Ingresos</Text>
-            <Text style={[styles.summaryValue, { color: '#4CAF50' }]}>
-              {paymentService.formatCurrency(financialSummary.totalConfirmed)}
-            </Text>
-        </View>
-        <View style={styles.summaryCard}>
-            <Text style={styles.summaryLabel}>Retiros Mecánicos</Text>
-            <Text style={[styles.summaryValue, { color: '#F44336' }]}>
-              {paymentService.formatCurrency(financialSummary.totalMechanicWithdrawals)}
-            </Text>
-        </View>
+          <View style={styles.summaryCard}>
+              <Text style={styles.summaryLabel}>Ingresos Totales</Text>
+              <Text style={styles.summaryValue}>
+                  {paymentService.formatCurrency(financialSummary.totalConfirmed)}
+              </Text>
+          </View>
       </View>
 
-      <View style={styles.filtersContainer}>
-        <TouchableOpacity 
-          style={[styles.filterChip, selectedFilter === 'all' && styles.activeFilter]}
-          onPress={() => setSelectedFilter('all')}
-        >
-          <Text style={[styles.filterText, selectedFilter === 'all' && styles.activeFilterText]}>Todos</Text>
-        </TouchableOpacity>
-        <TouchableOpacity 
-          style={[styles.filterChip, selectedFilter === 'confirmado' && styles.activeFilter]}
-          onPress={() => setSelectedFilter('confirmado')}
-        >
-          <Text style={[styles.filterText, selectedFilter === 'confirmado' && styles.activeFilterText]}>Completados</Text>
-        </TouchableOpacity>
-        <TouchableOpacity 
-          style={[styles.filterChip, selectedFilter === 'pendiente' && styles.activeFilter]}
-          onPress={() => setSelectedFilter('pendiente')}
-        >
-          <Text style={[styles.filterText, selectedFilter === 'pendiente' && styles.activeFilterText]}>Pendientes</Text>
-        </TouchableOpacity>
-      </View>
-
-      {loading && !refreshing ? (
-        <ActivityIndicator size="large" color="#007bff" style={{ marginTop: 20 }} />
+      {/* Lista de Pagos */}
+      {loading ? (
+         <ActivityIndicator size="large" color="#0000ff" style={{ marginTop: 20 }} />
       ) : (
         <FlatList
           data={payments}
           renderItem={renderItem}
           keyExtractor={(item) => item.id}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
+            <RefreshControl refreshing={refreshing} onRefresh={() => {
+                refreshPaymentsList();
+                loadFinancialSummary();
+            }} />
           }
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 40 }}
           ListEmptyComponent={
-            <Text style={styles.emptyText}>No hay pagos registrados</Text>
+            <View style={styles.emptyContainer}>
+                <Ionicons name="receipt-outline" size={48} color="#ccc" />
+                <Text style={styles.emptyText}>No hay pagos registrados</Text>
+            </View>
           }
         />
       )}
@@ -200,163 +187,149 @@ export default function PaymentsScreen() {
 }
 
 const styles = StyleSheet.create({
-  // ESTILOS NUEVOS PARA EL TÍTULO MANUAL
-  headerContainer: {
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 8,
-  },
-  screenTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#333',
-  },
-  
-  summaryContainer: {
-    flexDirection: 'row',
-    padding: 16,
-    justifyContent: 'space-between',
-  },
-  summaryCard: {
-    backgroundColor: 'white',
-    padding: 16,
-    borderRadius: 12,
-    width: '48%',
-    elevation: 2,
-    alignItems: 'center',
-  },
-  summaryLabel: {
-    fontSize: 12,
-    color: '#666',
-    marginBottom: 4,
-  },
-  summaryValue: {
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  filtersContainer: {
-    flexDirection: 'row',
-    paddingHorizontal: 16,
-    marginBottom: 10,
-  },
-  filterChip: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: '#f0f0f0',
-    marginRight: 8,
-  },
-  activeFilter: {
-    backgroundColor: '#007bff',
-  },
-  filterText: {
-    color: '#666',
-    fontWeight: '500',
-  },
-  activeFilterText: {
-    color: 'white',
-  },
-  listContent: {
-    padding: 16,
-    paddingTop: 0,
-  },
-  card: {
-    backgroundColor: 'white',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-  },
-  cardHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  iconContainer: {
-    marginRight: 12,
-  },
-  iconBg: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  cardInfo: {
-    flex: 1,
-  },
-  amount: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
-  },
-  userText: {
-    fontSize: 14,
-    color: '#666',
-    marginTop: 2,
-  },
-  dateText: {
-    fontSize: 12,
-    color: '#999',
-    marginTop: 2,
-  },
-  statusContainer: {
-    alignItems: 'flex-end',
-  },
-  statusBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-  },
-  statusText: {
-    color: 'white',
-    fontSize: 10,
-    fontWeight: 'bold',
-  },
-  detailsContainer: {
-    marginTop: 16,
-    paddingTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#f0f0f0',
-  },
-  detailRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-  },
-  detailLabel: {
-    fontSize: 12,
-    color: '#999',
-  },
-  detailValue: {
-    fontSize: 12,
-    color: '#333',
-    fontWeight: '500',
-    maxWidth: '70%',
-    textAlign: 'right',
-  },
-  actionsRow: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    marginTop: 12,
-  },
-  actionButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 6,
-    marginLeft: 8,
-  },
-  actionText: {
-    color: 'white',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  emptyText: {
-    textAlign: 'center',
-    marginTop: 40,
-    color: '#999',
-  },
+    // Estilos nuevos para el encabezado manual
+    headerContainer: {
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+        backgroundColor: '#fff', 
+    },
+    screenTitle: {
+        fontSize: 24,
+        fontWeight: 'bold',
+        color: '#333',
+    },
+    // Fin estilos nuevos
+    summaryContainer: {
+        paddingHorizontal: 16,
+        marginBottom: 8,
+    },
+    summaryCard: {
+        backgroundColor: '#fff',
+        padding: 16,
+        borderRadius: 12,
+        marginBottom: 8,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.05,
+        shadowRadius: 2,
+        elevation: 2,
+        alignItems: 'center',
+    },
+    summaryLabel: {
+        fontSize: 14,
+        color: '#666',
+        marginBottom: 4,
+    },
+    summaryValue: {
+        fontSize: 24,
+        fontWeight: 'bold',
+        color: '#2E7D32',
+    },
+    card: {
+        backgroundColor: '#fff',
+        borderRadius: 12,
+        marginBottom: 12,
+        padding: 16,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+        elevation: 3,
+    },
+    cardHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    iconContainer: {
+        marginRight: 12,
+    },
+    iconBg: {
+        width: 48,
+        height: 48,
+        borderRadius: 24,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    cardInfo: {
+        flex: 1,
+    },
+    amount: {
+        fontSize: 18,
+        fontWeight: 'bold',
+        color: '#333',
+    },
+    userText: {
+        fontSize: 14,
+        color: '#666',
+        marginTop: 2,
+    },
+    dateText: {
+        fontSize: 12,
+        color: '#999',
+        marginTop: 2,
+    },
+    statusContainer: {
+        alignItems: 'flex-end',
+    },
+    statusBadge: {
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 6,
+    },
+    statusText: {
+        color: 'white',
+        fontSize: 10,
+        fontWeight: 'bold',
+    },
+    detailsContainer: {
+        marginTop: 16,
+        paddingTop: 16,
+        borderTopWidth: 1,
+        borderTopColor: '#f0f0f0',
+    },
+    detailRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        marginBottom: 8,
+    },
+    detailLabel: {
+        fontSize: 14,
+        color: '#666',
+        fontWeight: '500',
+    },
+    detailValue: {
+        fontSize: 14,
+        color: '#333',
+        fontWeight: '600',
+        maxWidth: '60%',
+        textAlign: 'right'
+    },
+    actionsRow: {
+        marginTop: 12,
+        flexDirection: 'row',
+        justifyContent: 'flex-end',
+    },
+    actionButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 8,
+        paddingHorizontal: 16,
+        borderRadius: 8,
+        gap: 6
+    },
+    actionText: {
+        color: '#fff',
+        fontWeight: '600',
+        fontSize: 14
+    },
+    emptyContainer: {
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 40,
+    },
+    emptyText: {
+        color: '#999',
+        marginTop: 10,
+        fontSize: 16,
+    }
 });
