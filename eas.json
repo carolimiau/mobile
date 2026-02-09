@@ -1,6 +1,6 @@
 {
   "cli": {
-    "version": ">= 0.52.0"
+    "version": ">= 7.0.0"
   },
   "build": {
     "development": {
@@ -9,18 +9,20 @@
     },
     "preview": {
       "distribution": "internal",
-      "env":{
-       "EXPO_PUBLIC_API_URL": "https://backend-kg0o.onrender.com",
-       "EXPO_PUBLIC_PAYMENT_URL": "https://payment-uby0.onrender.com",
-       "EXPO_PUBLIC_SOCKET_URL": "https://websocket-ufng.onrender.com"
-      },
       "android": {
         "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://backend-kg0o.onrender.com",
+        "EXPO_PUBLIC_PAYMENT_URL": "https://payment-uby0.onrender.com",
+        "EXPO_PUBLIC_SOCKET_URL": "https://websocket-ufng.onrender.com"
       }
     },
     "production": {
-      "android": {
-        "buildType": "app-bundle"
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://backend-kg0o.onrender.com",
+        "EXPO_PUBLIC_PAYMENT_URL": "https://payment-uby0.onrender.com",
+        "EXPO_PUBLIC_SOCKET_URL": "https://websocket-ufng.onrender.com"
       }
     }
   },
