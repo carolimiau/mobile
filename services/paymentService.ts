@@ -1,5 +1,5 @@
+import { Alert } from 'react-native'; // Importante para debugear en el celular
 import apiService from './apiService';
-// 👇 Importamos la interfaz desde tu archivo central de tipos
 import { MechanicPayment } from '../types';
 
 // --- Enums y Tipos ---
@@ -36,7 +36,6 @@ export interface Payment {
   transactionDate?: string;
 }
 
-// Respuesta que esperamos de Transbank/Microservicio
 export interface WebpayInitResponse {
   token: string;
   url: string;
@@ -50,60 +49,65 @@ export interface FinancialSummary {
 
 // --- Servicio Principal ---
 
+// 🚨 HARDCODE: Escribimos la URL a fuego para descartar errores de .env
+const HARDCODED_PAYMENT_URL = 'https://payment-uby0.onrender.com';
+
 const paymentService = {
   
   // ==========================================
-  // 1. INICIAR PAGO WEBPAY (¡La pieza que faltaba!)
+  // 1. INICIAR PAGO WEBPAY (MODO PÁNICO / DEBUG)
   // ==========================================
   
   async initiateWebPayTransaction(amount: number, buyOrder: string, sessionId: string): Promise<WebpayInitResponse> {
+    const targetUrl = `${HARDCODED_PAYMENT_URL}/create`;
+    const returnUrl = `${HARDCODED_PAYMENT_URL}/commit`;
+
+    console.log('Intentando conectar a:', targetUrl);
+
     try {
-      // 1. URL del Microservicio de Pagos (Desde tu .env)
-      const PAYMENT_URL = process.env.EXPO_PUBLIC_PAYMENT_URL; 
-      
-      if (!PAYMENT_URL) {
-        throw new Error('Falta configurar EXPO_PUBLIC_PAYMENT_URL en el .env');
-      }
-
-      // 2. Definimos la URL de retorno (A donde Transbank avisa que pagaste)
-      // IMPORTANTE: Debe ser la URL de tu microservicio en Render, NO localhost.
-      const returnUrl = `${PAYMENT_URL}/commit`;
-
-      console.log('Iniciando pago en:', `${PAYMENT_URL}/create`);
-      console.log('Return URL:', returnUrl);
-
-      // 3. Hacemos la petición directa al Microservicio (usando fetch nativo para evitar líos de auth del apiService principal por ahora)
-      const response = await fetch(`${PAYMENT_URL}/create`, {
+      const response = await fetch(targetUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Accept': 'application/json'
         },
         body: JSON.stringify({
           amount: amount,
           buyOrder: buyOrder,
           sessionId: sessionId,
-          returnUrl: returnUrl // 👈 Aquí está la clave del éxito
+          returnUrl: returnUrl
         }),
       });
 
+      // 1. Si el servidor responde con error (404, 500, etc)
       if (!response.ok) {
         const errorText = await response.text();
-        throw new Error(`Error del Microservicio: ${errorText}`);
+        Alert.alert("Error Servidor", `Status: ${response.status}\n${errorText}`);
+        throw new Error(`Error HTTP: ${response.status}`);
       }
 
+      // 2. Intentamos leer el JSON
       const data = await response.json();
       
-      // Transbank devuelve { token, url }. Eso es lo que necesitamos para abrir el WebView.
+      // 3. Verificamos que venga la URL y el Token
+      if (!data.url || !data.token) {
+        Alert.alert("Error Datos", "Transbank no devolvió URL o Token validos.");
+        console.error("Respuesta incompleta:", data);
+        throw new Error("Datos de Webpay incompletos");
+      }
+
       return data;
 
-    } catch (error) {
+    } catch (error: any) {
+      // ESTO ES CLAVE: Te mostrará en la pantalla del celular qué pasó
       console.error('Error fatal iniciando Webpay:', error);
+      Alert.alert("Error de Conexión", `No se pudo iniciar el pago.\n${error.message}`);
       throw error;
     }
   },
 
   // ==========================================
-  // 2. Gestión de Pagos Generales (Usuarios)
+  // 2. Gestión de Pagos Generales
   // ==========================================
 
   async getAllPayments(): Promise<Payment[]> {
@@ -223,4 +227,4 @@ const paymentService = {
   }
 };
 
-export default paymentService;
+export default paymentService;  
