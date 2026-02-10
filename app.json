@@ -31,7 +31,7 @@
       "output": "static",
       "favicon": "./assets/images/favicon.png"
     },
-"plugins": [
+    "plugins": [
       [
         "expo-build-properties",
         {
@@ -48,8 +48,9 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "8236fefc-0195-4f77-9f96-12838affb031"
+        "projectId": "a0ae9219-397a-409e-ad3d-040bed12b2df"
       }
-    }
+    },
+    "owner": "ninalatasoft"
   }
 }
