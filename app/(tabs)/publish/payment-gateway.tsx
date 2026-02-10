@@ -1125,61 +1125,40 @@ export default function PaymentGatewayScreen() {
     }
   };
 
+// --- INICIO DEL BLOQUE DE RENDERIZADO Y MODAL ---
   const renderContent = () => {
-    // NO mostrar loading si el WebView está visible (usuario está en proceso de pago)
+    // 1. Si está cargando o verificando (y no estamos en el WebView), mostramos spinner
     if ((loading || paymentStatus === 'verifying') && !webviewVisible) {
       return (
         <View style={styles.centerContainer}>
           <ActivityIndicator size="large" color="#4CAF50" />
           <Text style={styles.loadingText}>
-            {paymentStatus === 'verifying' ? 'Verificando pago...' : 'Procesando...'}
+            {paymentStatus === 'verifying' ? 'Confirmando tu pago...' : 'Procesando...'}
           </Text>
-          {retryCount > 0 && (
-            <Text style={styles.retryText}>Reintento {retryCount}/{MAX_RETRIES}</Text>
-          )}
-          {reconciliationNeeded && (
-             <Button
-                title="Cancelar Verificación"
-                variant="outline"
-                onPress={() => {
-                  markPaymentCancelled(undefined, 'Cancelado manualmente por usuario');
-                  setReconciliationNeeded(false);
-                  setPaymentStatus('cancelled');
-                }}
-                style={{ marginTop: 20 }}
-              />
-          )}
         </View>
       );
     }
 
+    // 2. PANTALLA DE ÉXITO (Aquí es donde queremos llegar)
     if (paymentStatus === 'success') {
-      const serviceTypeStr = Array.isArray(serviceType) ? serviceType[0] : serviceType;
-      const isWalletDeposit = serviceTypeStr === 'wallet_deposit';
-      
+      const isWalletDeposit = (Array.isArray(serviceType) ? serviceType[0] : serviceType) === 'wallet_deposit';
       return (
         <View style={styles.centerContainer}>
           <Ionicons name="checkmark-circle" size={80} color="#4CAF50" />
-          <Text style={styles.successTitle}>
-            {isWalletDeposit ? '¡Carga Exitosa!' : '¡Pago Exitoso!'}
-          </Text>
+          <Text style={styles.successTitle}>{isWalletDeposit ? '¡Carga Exitosa!' : '¡Pago Exitoso!'}</Text>
           <Text style={styles.successText}>
-            {isWalletDeposit 
-              ? 'Tu saldo ha sido recargado correctamente.'
-              : 'Tu operación ha sido procesada correctamente.'
-            }
+             {isWalletDeposit ? 'Tu saldo ha sido actualizado.' : 'Tu transacción se completó correctamente.'}
           </Text>
           <Button
-            title={isWalletDeposit ? "Volver a Mi Billetera" : "Ir a Mis Publicaciones"}
+            title={isWalletDeposit ? "Volver a Billetera" : "Continuar"}
             onPress={() => {
+                // Limpiamos navegación para evitar volver atrás al pago
                 if (isWalletDeposit) {
-                  // Volver al wallet
-                  router.dismissAll();
-                  router.replace('/(tabs)/wallet');
+                    router.dismissAll();
+                    router.replace('/(tabs)/wallet');
                 } else {
-                  // Navegar al tab de perfil o mis publicaciones
-                  router.dismissAll();
-                  router.replace('/(tabs)');
+                    router.dismissAll();
+                    router.replace('/(tabs)');
                 }
             }}
             style={styles.homeButton}
@@ -1188,76 +1167,74 @@ export default function PaymentGatewayScreen() {
       );
     }
     
+    // 3. PANTALLA DE FALLO
     if (paymentStatus === 'failure' || paymentStatus === 'cancelled') {
         return (
             <View style={styles.centerContainer}>
                 <Ionicons name="close-circle" size={80} color="#F44336" />
-                <Text style={styles.successTitle}>Pago Fallido</Text>
+                <Text style={styles.successTitle}>Pago No Completado</Text>
                 <Text style={styles.successText}>
-                    {paymentStatus === 'cancelled' ? 'Anulaste la operación.' : 'Ocurrió un error al procesar el pago.'}
+                    {paymentStatus === 'cancelled' ? 'La operación fue anulada.' : 'Hubo un error al procesar el pago.'}
                 </Text>
-                <Button
-                    title="Intentar Nuevamente"
+                <Button 
+                    title="Intentar Nuevamente" 
                     onPress={() => {
                         setPaymentStatus('pending');
                         setIsWaitingForPayment(false);
                         setWebviewVisible(false);
-                    }}
-                    style={styles.homeButton}
+                    }} 
+                    style={styles.homeButton} 
                 />
-                 <Button
-                    variant="outline"
-                    title="Volver"
-                    onPress={() => router.back()}
-                    style={{ marginTop: 10, width: 200 }}
+                <Button 
+                    variant="outline" 
+                    title="Volver" 
+                    onPress={() => router.back()} 
+                    style={{ marginTop: 10, width: 200 }} 
                 />
             </View>
         );
     }
 
-    // PENDING STATE - Si el WebView está visible, mostrar un placeholder simple
+    // 4. PLACEHOLDER MIENTRAS ESTÁ EL WEBVIEW ABIERTO
     if (webviewVisible) {
-      console.log('🔵 [Render] Mostrando placeholder porque webviewVisible =', true);
       return (
         <View style={styles.centerContainer}>
-          <Text style={styles.loadingText}>Procesando pago...</Text>
+          <Text style={styles.loadingText}>Completando pago en WebPay...</Text>
         </View>
       );
     }
 
-    console.log('🔵 [Render] Mostrando formulario de pago normal');
+    // 5. PANTALLA NORMAL (Formulario de pago)
     return (
       <View style={styles.container}>
         <View style={styles.summaryCard}>
           <Text style={styles.summaryTitle}>Resumen de Pago</Text>
           <View style={styles.row}>
             <Text style={styles.label}>Servicio:</Text>
-            <Text style={styles.value}>
-                {Array.isArray(description) ? description[0] : description}
-            </Text>
+            <Text style={styles.value}>{Array.isArray(description) ? description[0] : description}</Text>
           </View>
           <View style={styles.divider} />
           <View style={styles.totalRow}>
             <Text style={styles.totalLabel}>Total a Pagar:</Text>
-            <Text style={styles.totalValue}>
-              ${Number(amount).toLocaleString('es-CL')}
-            </Text>
+            <Text style={styles.totalValue}>${Number(amount).toLocaleString('es-CL')}</Text>
           </View>
         </View>
 
         <Text style={styles.methodTitle}>Selecciona Medio de Pago</Text>
-
+        
+        {/* Botón WebPay */}
         <TouchableOpacity 
           style={[styles.methodCard, selectedMethod === 'webpay' && styles.selectedMethod]}
           onPress={() => setSelectedMethod('webpay')}
         >
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                 <Ionicons name="card" size={24} color="#333" />
-                <Text style={styles.methodText}>WebPay Plus (Débito/Crédito)</Text>
+                <Text style={styles.methodText}>WebPay Plus</Text>
             </View>
             {selectedMethod === 'webpay' && <Ionicons name="checkmark-circle" size={24} color="#4CAF50" />}
         </TouchableOpacity>
 
+        {/* Botón Wallet (Solo si no es recarga) */}
         {(Array.isArray(serviceType) ? serviceType[0] : serviceType) !== 'wallet_deposit' && (
         <TouchableOpacity 
           style={[styles.methodCard, selectedMethod === 'wallet' && styles.selectedMethod]}
@@ -1274,10 +1251,10 @@ export default function PaymentGatewayScreen() {
         </TouchableOpacity>
         )}
 
-        <Button
-          title={`Pagar $${Number(amount).toLocaleString('es-CL')}`}
-          onPress={handlePayment}
-          style={styles.payButton}
+        <Button 
+            title={`Pagar $${Number(amount).toLocaleString('es-CL')}`} 
+            onPress={handlePayment} 
+            style={styles.payButton} 
         />
       </View>
     );
@@ -1287,149 +1264,99 @@ export default function PaymentGatewayScreen() {
     <Screen backgroundColor="#F5F5F5">
       {renderContent()}
 
-
+      {/* --- AQUÍ ESTÁ EL MODAL CON EL ARREGLO DE AUTOBOX --- */}
       <Modal
         visible={webviewVisible}
         animationType="slide"
         presentationStyle="fullScreen"
-        transparent={false}
         onRequestClose={() => {
-            Alert.alert(
-                'Cancelar Pago',
-                '¿Estás seguro que deseas cancelar el pago?',
-                [
-                    { text: 'No', style: 'cancel' },
-                    { text: 'Sí', style: 'destructive', onPress: () => {
-                        setWebviewVisible(false);
-                        markPaymentCancelled();
-                    }}
-                ]
-            );
+           Alert.alert('Cancelar', '¿Deseas cancelar el proceso?', [
+               { text: 'No', style: 'cancel' },
+               { text: 'Sí', style: 'destructive', onPress: () => { setWebviewVisible(false); markPaymentCancelled(); }}
+           ]);
         }}
       >
         <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }}>
+            <StatusBar barStyle="dark-content" />
+            
             <View style={styles.webviewHeader}>
                 <Text style={styles.webviewTitle}>WebPay - Transbank</Text>
                 <TouchableOpacity onPress={() => {
-                     Alert.alert(
-                        'Cancelar Pago',
-                        '¿Estás seguro que deseas cancelar el pago?',
-                        [
-                            { text: 'No', style: 'cancel' },
-                            { text: 'Sí', style: 'destructive', onPress: () => {
-                                setWebviewVisible(false);
-                                markPaymentCancelled();
-                            }}
-                        ]
-                    );
+                     Alert.alert('Cancelar', '¿Deseas cancelar el proceso?', [
+                         { text: 'No', style: 'cancel' },
+                         { text: 'Sí', style: 'destructive', onPress: () => { setWebviewVisible(false); markPaymentCancelled(); }}
+                     ]);
                 }}>
                     <Ionicons name="close" size={24} color="#333" />
                 </TouchableOpacity>
             </View>
+
             {(webviewUrl || webviewHtml) ? (
                 <WebView
+                    // ESTO ES LO MÁS IMPORTANTE PARA QUE NO FALLE
+                    originWhitelist={['*', 'autobox://*', 'http://*', 'https://*']}
+                    
                     source={webviewHtml ? { html: webviewHtml, baseUrl: 'https://webpay3gint.transbank.cl' } : { uri: webviewUrl as string }}
                     style={{ flex: 1 }}
                     startInLoadingState={true}
+                    javaScriptEnabled={true}
+                    domStorageEnabled={true}
+                    
                     renderLoading={() => (
                         <View style={[styles.centerContainer, { flex: 1, position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#fff' }]}>
                             <ActivityIndicator size="large" color="#4CAF50" />
                             <Text style={{ marginTop: 16, color: '#666' }}>Cargando WebPay...</Text>
                         </View>
                     )}
-                    onLoadStart={() => {
-                        console.log('🔵 [WebView] Iniciando carga. HTML Presente:', !!webviewHtml, 'URL:', webviewUrl);
-                    }}
-                    onLoadEnd={() => {
-                        console.log('✅ [WebView] Carga completada');
-                    }}
-                    onError={(syntheticEvent) => {
-                        const { nativeEvent } = syntheticEvent;
-                        console.error('❌ [WebView] Error:', nativeEvent);
-                        Alert.alert(
-                            'Error al cargar WebPay',
-                            `No se pudo cargar la página de pago.\n\nError: ${nativeEvent.description}\n\nURL: ${webviewUrl}`,
-                            [
-                                { text: 'Cerrar', onPress: () => setWebviewVisible(false) },
-                                { text: 'Reintentar', onPress: () => {
-                                    if (webviewHtml) {
-                                        const current = webviewHtml;
-                                        setWebviewHtml(null);
-                                        setTimeout(() => setWebviewHtml(current), 100);
-                                    } else {
-                                        const current = webviewUrl;
-                                        setWebviewUrl(null);
-                                        setTimeout(() => setWebviewUrl(current), 100);
-                                    }
-                                }}
-                            ]
-                        );
-                    }}
-                    onHttpError={(syntheticEvent) => {
-                        const { nativeEvent } = syntheticEvent;
-                        console.error('❌ [WebView] HTTP Error:', nativeEvent.statusCode, nativeEvent.url);
-                    }}
-                    onNavigationStateChange={(navState) => {
-                        console.log('🔵 [WebView] Navegación:', navState.url);
-                        console.log('🔵 [WebView] Loading:', navState.loading);
+                    
+                    // INTERCEPTOR PARA ANDROID/iOS
+                    onShouldStartLoadWithRequest={(request) => {
+                        const url = request.url;
                         
-                        // NO cerrar mientras está cargando (a menos que sea el mismo link final)
-                        if (navState.loading) {
-                            return;
-                        }
-                        
-                        // 1. Detectar Deep Links de la App (autobox://)
-                        if (navState.url.includes('autobox://payment-success')) {
-                            console.log('✅ [WebView] Deep Link Success detectado');
-                            setWebviewVisible(false);
-                            checkPendingPayment(); // Esto confirmará con el backend/storage
-                            return;
+                        // Si es el retorno a la App...
+                        if (url.startsWith('autobox://')) {
+                            setWebviewVisible(false); // 1. Cerramos Modal
+                            
+                            // 2. Verificamos con el backend (Esto activará el mensaje de ÉXITO)
+                            if (url.includes('success') || url.includes('AUTHORIZED') || url.includes('result') || url.includes('commit')) {
+                                checkPendingPayment(); 
+                            } else if (url.includes('cancel') || url.includes('failed')) {
+                                markPaymentCancelled(undefined, 'Cancelado en WebPay');
+                            } else {
+                                checkPendingPayment();
+                            }
+                            return false; // STOP: No navegamos, solo ejecutamos lógica
                         }
 
-                        if (navState.url.includes('autobox://payment-cancelled')) {
-                            console.log('🛑 [WebView] Deep Link Cancelled detectado');
-                            setWebviewVisible(false);
-                            markPaymentCancelled(undefined, 'Cancelado en WebPay');
-                            return;
-                        }
-
-                        // 2. Detectar URLs de callback del propio backend (fallback por si el JS no corre)
-                        const isPaymentCallback = navState.url.includes('payments/webpay/callback') || 
-                                                 navState.url.includes('payments/webpay/finish') ||
-                                                 navState.url.includes('payments/public/webpay/return') ||
-                                                 navState.url.includes('payments/public/webpay/confirm');
-                                                 
-                        const isWalletCallback = navState.url.includes('wallet/public/deposit/transbank/return') ||
-                                                navState.url.includes('wallet/deposit/transbank/confirm');
-                        
-                        // 3. Detectar anulación directa de Transbank (TBK_TOKEN + TBK_ORDEN_COMPRA)
-                        // Esto ocurre cuando el usuario presiona "Anular" en el formulario de Webpay
-                        if (navState.url.includes('TBK_TOKEN') && navState.url.includes('TBK_ORDEN_COMPRA')) {
-                             console.log('🛑 [WebView] Transacción anulada por usuario (TBK_TOKEN)');
+                        // Si es callback directo del backend
+                        if (url.includes('/webpay/callback') || url.includes('/webpay/return')) {
                              setWebviewVisible(false);
-                             setTimeout(() => {
-                                 markPaymentCancelled(undefined, 'Anulado por usuario en WebPay');
-                             }, 500);
+                             checkPendingPayment();
+                             return false;
+                        }
+                        return true;
+                    }}
+                    
+                    // RESPALDO DE NAVEGACIÓN
+                    onNavigationStateChange={(navState) => {
+                        const url = navState.url;
+                        // Usuario cancela en Transbank
+                        if (url.includes('TBK_TOKEN') && url.includes('TBK_ORDEN_COMPRA')) {
+                             setWebviewVisible(false);
+                             markPaymentCancelled(undefined, 'Anulado por usuario');
                              return;
                         }
-                        
-                        if (isPaymentCallback || isWalletCallback) {
-                             console.log('✅ [WebView] Backend Callback URL detectada - Cerrando inmediatamente');
-                             
-                             // CERRAR INMEDIATAMENTE: No esperar carga de HTML
+                        // Doble chequeo de retorno
+                        if (url.startsWith('autobox://')) {
                              setWebviewVisible(false);
-                             
-                             // Iniciar verificación en background inmediatamente
                              checkPendingPayment();
-                             
-                             return; 
                         }
                     }}
                 />
             ) : (
                 <View style={[styles.centerContainer, { flex: 1 }]}>
                     <ActivityIndicator size="large" color="#4CAF50" />
-                    <Text style={{ marginTop: 16, color: '#666' }}>Preparando pago...</Text>
+                    <Text style={{ marginTop: 16, color: '#666' }}>Iniciando...</Text>
                 </View>
             )}
         </SafeAreaView>
