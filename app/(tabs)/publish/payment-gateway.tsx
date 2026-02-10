@@ -1256,14 +1256,33 @@ export default function PaymentGatewayScreen() {
       {renderContent()}
 
 {/* --- MODAL DE PRODUCCIÓN (SEGURIDAD MÁXIMA) --- */}
-<Modal
+      <Modal
         visible={webviewVisible}
         animationType="slide"
         presentationStyle="fullScreen"
         onRequestClose={() => {
-            // Si el usuario presiona atrás físico
-            setWebviewVisible(false);
-            checkPendingPayment(); // Ante la duda, verificar
+            // ALERTA ANDROID (Botón atrás físico)
+            Alert.alert(
+                '¿Estado del Pago?',
+                '¿Lograste realizar el pago en el portal del banco?',
+                [
+                    { 
+                        text: 'No, Cancelar', 
+                        style: 'destructive', 
+                        onPress: () => {
+                            setWebviewVisible(false);
+                            markPaymentCancelled(undefined, 'Cancelado por usuario');
+                        }
+                    },
+                    { 
+                        text: 'Sí, Verificar', 
+                        onPress: () => {
+                            setWebviewVisible(false);
+                            checkPendingPayment(); // <--- AQUÍ ESTÁ LA CLAVE
+                        }
+                    }
+                ]
+            );
         }}
       >
         <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }}>
@@ -1271,27 +1290,33 @@ export default function PaymentGatewayScreen() {
             
             {/* Header */}
             <View style={styles.webviewHeader}>
-                <Text style={styles.webviewTitle}>WebPay</Text>
+                <Text style={styles.webviewTitle}>WebPay - Transbank</Text>
                 <TouchableOpacity onPress={() => {
-                     // ALERTA MANUAL
+                     // ALERTA BOTÓN X (Manual)
                      Alert.alert(
-                        'Confirmar Estado',
-                        'Si ya pagaste en el banco, presiona "Verificar".',
+                        '¿Cerrar ventana?',
+                        'Si ya pagaste, selecciona "Verificar". Si quieres salir sin pagar, selecciona "Cancelar".',
                         [
-                            { text: 'Cancelar', style: 'destructive', onPress: () => { setWebviewVisible(false); markPaymentCancelled(undefined, 'Usuario canceló'); } },
-                            { text: 'Verificar Pago', onPress: () => { setWebviewVisible(false); checkPendingPayment(); } }
+                            { 
+                                text: 'Cancelar', 
+                                style: 'destructive', 
+                                onPress: () => {
+                                    setWebviewVisible(false);
+                                    markPaymentCancelled(undefined, 'Cancelado manualmente');
+                                }
+                            },
+                            { 
+                                text: 'Verificar Pago', 
+                                onPress: () => {
+                                    setWebviewVisible(false);
+                                    checkPendingPayment(); // <--- VERIFICAR SIEMPRE
+                                }
+                            }
                         ]
                     );
                 }}>
                     <Ionicons name="close" size={24} color="#333" />
                 </TouchableOpacity>
-            </View>
-
-            {/* --- DEBUG VISUAL: Muestra la URL actual para que sepas dónde se traba --- */}
-            <View style={{ padding: 4, backgroundColor: '#eee' }}>
-                <Text numberOfLines={1} style={{ fontSize: 10, color: '#555', textAlign: 'center' }}>
-                    {webviewUrl ? webviewUrl.toString().substring(0, 80) : 'Iniciando...'}
-                </Text>
             </View>
 
             {(webviewUrl || webviewHtml) ? (
@@ -1303,62 +1328,41 @@ export default function PaymentGatewayScreen() {
                     javaScriptEnabled={true}
                     domStorageEnabled={true}
                     
-                    // ON NAVIGATION STATE CHANGE: Aquí actualizamos el debug y detectamos URLs
-                    onNavigationStateChange={(navState) => {
-                        const url = navState.url;
-                        console.log('🔄 [Navegación]:', url);
-                        
-                        // Actualizamos el estado de la URL si lo tienes, si no, solo log
-                        // setWebviewUrl(url); // Descomenta si usas este estado para algo más
-
-                        // 1. LA TRAMPA: Si vemos que vuelve a tu backend o detecta éxito
-                        if (
-                            url.includes('/webpay/return') || 
-                            url.includes('/webpay/final') || 
-                            url.includes('response_code') || 
-                            url.includes('autobox://')
-                        ) {
-                            console.log('✅ ¡Retorno detectado! Cerrando y Verificando...');
-                            setWebviewVisible(false);
-                            checkPendingPayment();
-                        }
-                    }}
-
-                    // SHOULD START LOAD: Intercepta antes de cargar
+                    renderLoading={() => (
+                        <View style={[styles.centerContainer, { flex: 1, position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#fff' }]}>
+                            <ActivityIndicator size="large" color="#4CAF50" />
+                            <Text style={{ marginTop: 16, color: '#666' }}>Procesando...</Text>
+                        </View>
+                    )}
+                    
+                    // INTERCEPTOR MAESTRO
                     onShouldStartLoadWithRequest={(request) => {
                         const url = request.url;
-                        
-                        // 2. LA TRAMPA (Refuerzo): 
-                        // Si la URL contiene indicaciones de retorno del backend
-                        if (
-                            url.startsWith('autobox://') ||
-                            url.includes('/webpay/return') || 
-                            url.includes('/payments/result') ||
-                            url.includes('token_ws') // Transbank devuelve el token en la URL
-                        ) {
-                             console.log('⚡ [Interceptor] Detectado retorno:', url);
-                             
-                             // TRUCO: Si es una URL http normal (tu backend), 
-                             // dejamos que cargue por 1 segundo para que el backend procese la confirmación
-                             // y luego cerramos.
-                             if (!url.startsWith('autobox://')) {
-                                 setTimeout(() => {
-                                     setWebviewVisible(false);
-                                     checkPendingPayment();
-                                 }, 2000); // Espera 2 seg a que tu backend reciba el OK de Transbank
-                                 return true; // Deja que cargue la página del backend
-                             } else {
-                                 setWebviewVisible(false);
-                                 checkPendingPayment();
-                                 return false;
-                             }
+                        console.log('⚡ [WebView URL]:', url);
+
+                        // 1. SI DETECTAMOS EL RETORNO (Sea éxito o fracaso en el banco)
+                        if (url.startsWith('autobox://')) {
+                            setWebviewVisible(false);
+                            // NO asumimos cancelación. SIEMPRE verificamos con el backend.
+                            // El backend es la única fuente de la verdad.
+                            checkPendingPayment(); 
+                            return false; 
                         }
+                        
+                        // 2. CALLBACKS DEL BACKEND (Por si acaso)
+                        if (url.includes('/webpay/callback') || url.includes('/webpay/return') || url.includes('result')) {
+                             setWebviewVisible(false);
+                             checkPendingPayment();
+                             return false;
+                        }
+
                         return true;
                     }}
                 />
             ) : (
                 <View style={[styles.centerContainer, { flex: 1 }]}>
                     <ActivityIndicator size="large" color="#4CAF50" />
+                    <Text style={{ marginTop: 16, color: '#666' }}>Conectando...</Text>
                 </View>
             )}
         </SafeAreaView>
