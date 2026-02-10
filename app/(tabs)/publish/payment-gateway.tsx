@@ -564,6 +564,15 @@ export default function PaymentGatewayScreen() {
   };
 
   const handlePayment = async () => {
+
+    setLoading(true);
+    setErrorDetails(null);
+    // --- AGREGA ESTO ---
+    setWebviewHtml(null); // Limpia basura anterior
+    setWebviewUrl(null);  // Limpia URL anterior
+    // -------------------
+    isCancelledRef.current = false;
+    
     // Validaciones previas
     const amountNum = Number(amount);
     if (isNaN(amountNum) || amountNum <= 0) {
@@ -1257,95 +1266,92 @@ export default function PaymentGatewayScreen() {
 
 {/* --- MODAL DE PRODUCCIÓN (SEGURIDAD MÁXIMA) --- */}
 {/* --- MODAL CORREGIDO: DEJA ENTRAR A TRANSBANK --- */}
-      <Modal
+<Modal
         visible={webviewVisible}
         animationType="slide"
         presentationStyle="fullScreen"
         onRequestClose={() => {
-            // Si aprieta atrás en Android
-            Alert.alert(
-                '¿Cancelar?',
-                'Si cancelas ahora, la operación se anulará.',
-                [
-                    { text: 'No, seguir', style: 'cancel' },
-                    { text: 'Sí, cancelar', style: 'destructive', onPress: () => { setWebviewVisible(false); markPaymentCancelled(); } }
-                ]
-            );
+            // Si el usuario presiona "Atrás" físico en Android
+            Alert.alert('Cancelar Pago', '¿Deseas salir sin pagar?', [
+                { text: 'No', style: 'cancel' },
+                { text: 'Sí, Salir', style: 'destructive', onPress: () => { setWebviewVisible(false); markPaymentCancelled(); } }
+            ]);
         }}
       >
         <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }}>
             <StatusBar barStyle="dark-content" />
             
-            {/* Header */}
+            {/* Header Simple */}
             <View style={styles.webviewHeader}>
                 <Text style={styles.webviewTitle}>WebPay</Text>
                 <TouchableOpacity onPress={() => {
-                     Alert.alert(
-                        'Atención',
-                        '¿Deseas cerrar la ventana de pago?',
-                        [
-                            { text: 'No', style: 'cancel' },
-                            // Si cierra manual, asumimos cancelación salvo que el usuario diga "Ya pagué" (Lógica simplificada)
-                            { text: 'Cerrar', style: 'destructive', onPress: () => { setWebviewVisible(false); markPaymentCancelled(); } }
-                        ]
-                    );
+                     // Botón X Manual
+                     setWebviewVisible(false);
+                     checkPendingPayment(); // Siempre verificamos, por si acaso
                 }}>
                     <Ionicons name="close" size={24} color="#333" />
                 </TouchableOpacity>
             </View>
 
-            {/* Debug URL: Para que veas si carga algo */}
+            {/* Debug URL: Muestra qué está pasando realmente */}
             <View style={{ padding: 4, backgroundColor: '#eee' }}>
                 <Text numberOfLines={1} style={{ fontSize: 10, color: '#555', textAlign: 'center' }}>
-                    {webviewUrl ? 'Cargando URL...' : 'Cargando Formulario...'}
+                    {webviewUrl || 'Esperando URL...'}
                 </Text>
             </View>
 
             {(webviewUrl || webviewHtml) ? (
                 <WebView
-                    originWhitelist={['*']} // Permitir todo para evitar bloqueos tontos
+                    key="webview-payment" // Forzamos re-render si cambia
+                    
+                    // 1. PERMISOS TOTALES
+                    originWhitelist={['*']} 
+                    
                     source={webviewHtml ? { html: webviewHtml, baseUrl: 'https://webpay3gint.transbank.cl' } : { uri: webviewUrl as string }}
+                    
                     style={{ flex: 1 }}
                     startInLoadingState={true}
                     javaScriptEnabled={true}
                     domStorageEnabled={true}
                     
-                    // --- AQUÍ ESTABA EL ERROR, AHORA CORREGIDO ---
+                    // 2. DEBUG DE ERRORES DE CARGA (Para saber si falla la red)
+                    onError={(syntheticEvent) => {
+                        const { nativeEvent } = syntheticEvent;
+                        console.warn('WebView error: ', nativeEvent);
+                        Alert.alert('Error de Conexión', 'No pudimos cargar el banco via WebPay.');
+                    }}
+                    
+                    // 3. INTERCEPTOR MÍNIMO (Solo busca el éxito)
                     onShouldStartLoadWithRequest={(request) => {
                         const url = request.url;
-                        console.log('⚡ [WebView Request]:', url);
+                        console.log('⚡ Navegando a:', url);
 
-                        // 1. ¡IMPORTANTE! Si es Transbank, DEJAR PASAR SIEMPRE.
-                        // Esto arregla el "no me redirige al banco".
-                        if (url.includes('transbank.cl')) {
-                            return true; 
-                        }
-
-                        // 2. Si es autobox (App Scheme) -> EXITO/FIN
+                        // Si es el esquema de la app -> ES EL FINAL
                         if (url.startsWith('autobox://')) {
                             setWebviewVisible(false);
                             checkPendingPayment();
-                            return false; // Stop carga
+                            return false; // No navegar, cerrar.
                         }
                         
-                        // 3. Si es el retorno a TU Backend (success/finish/return)
-                        // Ajusta '/webpay/return' a la ruta exacta de tu backend si la sabes.
-                        if (url.includes('/webpay/return') || url.includes('/webpay/final')) {
-                             // Dejamos que cargue un segundo para que el backend procese y luego cerramos
-                             setTimeout(() => {
-                                 setWebviewVisible(false);
-                                 checkPendingPayment();
-                             }, 1500);
-                             return true; 
+                        // DEJAR PASAR TODO LO DEMÁS (Transbank, Redirecciones, etc.)
+                        return true;
+                    }}
+                    
+                    // 4. RESPALDO (Por si el request no lo pilla)
+                    onNavigationStateChange={(navState) => {
+                        // Solo actualizamos el debug visual
+                        // setWebviewUrl(navState.url); 
+                        
+                        if (navState.url.startsWith('autobox://')) {
+                            setWebviewVisible(false);
+                            checkPendingPayment();
                         }
-
-                        return true; // Por defecto, dejar cargar todo lo demás
                     }}
                 />
             ) : (
                 <View style={[styles.centerContainer, { flex: 1 }]}>
                     <ActivityIndicator size="large" color="#4CAF50" />
-                    <Text style={{ marginTop: 16, color: '#666' }}>Iniciando...</Text>
+                    <Text style={{ marginTop: 16, color: '#666' }}>Iniciando conexión...</Text>
                 </View>
             )}
         </SafeAreaView>
