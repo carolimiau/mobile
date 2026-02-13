@@ -4,7 +4,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Screen } from '../../components/ui/Screen';
 import paymentService from '../../services/paymentService';
-import { MechanicPayment } from '../../types';
+import { MechanicPayment } from '../../types/index';
 import { getImageUrl } from '../../utils/imageUtils';
 
 export default function MechanicPaymentsScreen() {
@@ -27,7 +27,7 @@ export default function MechanicPaymentsScreen() {
     try {
       setLoading(true);
       const data = await paymentService.getMechanicPayouts(mechanicId as string);
-      setPayments(data || []);
+      setPayments((data as unknown as MechanicPayment[]) || []);
     } catch (error) {
       console.error('Error loading mechanic payments:', error);
       Alert.alert('Error', 'No se pudieron cargar los pagos del mecánico');

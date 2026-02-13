@@ -6,6 +6,7 @@ import { Screen } from '../../components/ui/Screen';
 import { Button } from '../../components/ui/Button';
 import { ProfileImageUploader } from '../../components/admin/ProfileImageUploader';
 import adminService, { Mechanic } from '../../services/adminService';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 
 export default function MechanicDetailScreen() {
   const { id } = useLocalSearchParams();
@@ -157,7 +158,15 @@ export default function MechanicDetailScreen() {
         <View style={{ width: 40 }} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.content} style={{ backgroundColor: '#F8F9FA' }}>
+      <KeyboardAwareScrollView
+      style={{ flex: 1, backgroundColor: '#F8F9FA' }}
+      resetScrollToCoords={{ x: 0, y: 0 }}
+      contentContainerStyle={{ flexGrow: 1 }}
+      scrollEnabled={true}
+      enableOnAndroid={true} // Vital para que funcione en Android
+      extraScrollHeight={20} // Un pequeño margen extra arriba del teclado
+      keyboardShouldPersistTaps="handled" // Para que al tocar fuera se cierre el teclado o funcionen los botones
+      >
         
         {/* Avatar Section */}
         <View style={styles.avatarSection}>
@@ -260,7 +269,7 @@ export default function MechanicDetailScreen() {
           {/* Add more actions if needed, e.g. View Schedule */}
         </View>
 
-      </ScrollView>
+      </KeyboardAwareScrollView>
     </Screen>
   );
 }

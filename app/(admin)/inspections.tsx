@@ -19,6 +19,7 @@ import { useFocusEffect, useLocalSearchParams, router } from 'expo-router';
 import adminService, { AdminInspection, Mechanic } from '../../services/adminService';
 import apiService from '../../services/apiService';
 import { Screen } from '../../components/ui/Screen';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { InspectionCard } from '../../components/admin/InspectionCard';
 
 const { width } = Dimensions.get('window');
@@ -455,7 +456,15 @@ export default function AdminInspectionsScreen() {
                   <Text style={styles.searchingText}>Buscando disponibles...</Text>
                 </View>
               ) : (
-                <ScrollView style={styles.mechanicsList}>
+                  <KeyboardAwareScrollView
+                      style={{ flex: 1, backgroundColor: '#F8F9FA' }}
+                      resetScrollToCoords={{ x: 0, y: 0 }}
+                      contentContainerStyle={{ flexGrow: 1 }}
+                      scrollEnabled={true}
+                      enableOnAndroid={true} // Vital para que funcione en Android
+                      extraScrollHeight={20} // Un pequeño margen extra arriba del teclado
+                      keyboardShouldPersistTaps="handled" // Para que al tocar fuera se cierre el teclado o funcionen los botones
+                    >
                   {filteredMechanics.length === 0 ? (
                     <View style={styles.noResults}>
                       <Ionicons name="person-outline" size={48} color="#CCC" />
@@ -492,7 +501,7 @@ export default function AdminInspectionsScreen() {
                       </TouchableOpacity>
                     ))
                   )}
-                </ScrollView>
+                </KeyboardAwareScrollView>
               )}
 
               <TouchableOpacity

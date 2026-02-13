@@ -19,6 +19,7 @@ import { Select } from '../../components/ui/Select';
 import { Button } from '../../components/ui/Button';
 import { ProfileImageUploader } from '../../components/admin/ProfileImageUploader';
 import { NATIONALITIES } from '../../constants/admin';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 
 const COMMUNES_SANTIAGO = [
   'Santiago Centro', 'Cerrillos', 'Cerro Navia', 'Conchalí', 'El Bosque', 'Estación Central',
@@ -184,7 +185,15 @@ export default function CreateMechanicScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={{ flex: 1 }}
       >
-        <ScrollView contentContainerStyle={styles.content}>
+        <KeyboardAwareScrollView
+          style={{ flex: 1, backgroundColor: '#F8F9FA' }}
+          resetScrollToCoords={{ x: 0, y: 0 }}
+          contentContainerStyle={{ flexGrow: 1 }}
+          scrollEnabled={true}
+          enableOnAndroid={true} // Vital para que funcione en Android
+          extraScrollHeight={20} // Un pequeño margen extra arriba del teclado
+          keyboardShouldPersistTaps="handled" // Para que al tocar fuera se cierre el teclado o funcionen los botones
+        >
           <View style={styles.header}>
             <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
               <Ionicons name="chevron-back" size={28} color="#333" />
@@ -294,7 +303,7 @@ export default function CreateMechanicScreen() {
               style={styles.submitButton}
             />
           </View>
-        </ScrollView>
+        </KeyboardAwareScrollView>
       </KeyboardAvoidingView>
     </Screen>
   );

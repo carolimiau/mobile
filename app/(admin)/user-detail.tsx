@@ -56,8 +56,13 @@ export default function UserDetailScreen() {
         relationRole: item.relationRole // Included from backend
       }));
 
+      const mappedPayments = (paymentsData || []).map((item: any) => ({
+        ...item,
+        metodo: (item.metodo as "Débito" | "Saldo_Autobox" | "Transferencia" | "Efectivo" | "Webpay")
+      }));
+
       setInspections(mappedInspections);
-      setPayments(paymentsData || []);
+      setPayments(mappedPayments);
 
     } catch (error) {
       console.error('Error loading user data:', error);

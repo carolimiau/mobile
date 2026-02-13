@@ -13,6 +13,7 @@ import adminService from '../../services/adminService';
 import { Screen } from '../../components/ui/Screen';
 import { Button } from '../../components/ui/Button';
 import { useFocusEffect } from '@react-navigation/native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 
 const DAYS = [
   { id: 1, name: 'Lunes' },
