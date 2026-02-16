@@ -11,6 +11,7 @@ import {
   Image,
   Platform,
   Modal,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -23,6 +24,7 @@ import { Card } from '../../components/ui/Card';
 import { useFocusEffect } from '@react-navigation/native';
 import { Inspection } from '../../types';
 import { INSPECTION_SECTIONS } from '../../constants/InspectionForm';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 
 export default function InspectionDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -207,7 +209,12 @@ export default function InspectionDetailScreen() {
 
   return (
     <Screen style={styles.container}>
-      <ScrollView contentContainerStyle={styles.content}>
+      <KeyboardAwareScrollView
+         contentContainerStyle={styles.content} // Mantenemos tu estilo original
+         enableOnAndroid={true}
+         extraScrollHeight={100} // Damos buen espacio extra porque hay muchos inputs
+         keyboardShouldPersistTaps="handled" // IMPORTANTE: Para que los botones (radio buttons) funcionen al primer toque aunque el teclado esté abierto
+      >
         <Card style={styles.headerCard}>
           <Text style={styles.title}>
             {vehicle?.marca} {vehicle?.modelo}
@@ -396,13 +403,17 @@ export default function InspectionDetailScreen() {
             />
           </Card>
         )}
-      </ScrollView>
+      </KeyboardAwareScrollView>
 
       <Modal
         visible={showRejectModal}
         transparent={true}
         animationType="slide"
         onRequestClose={() => setShowRejectModal(false)}
+      >
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={{ flex: 1 }}
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
@@ -436,6 +447,7 @@ export default function InspectionDetailScreen() {
             </View>
           </View>
         </View>
+        </KeyboardAvoidingView>
       </Modal>
     </Screen>
   );

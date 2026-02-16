@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SelectPicker } from './SelectPicker';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 
 const { height } = Dimensions.get('window');
 
@@ -95,7 +96,12 @@ export const FilterModal = ({ visible, onClose, onApply, onReset, currentFilters
           </TouchableOpacity>
         </View>
         
-        <ScrollView style={styles.content} contentContainerStyle={styles.scrollContent}>
+      <KeyboardAwareScrollView
+         contentContainerStyle={styles.content} // Mantenemos tu estilo original
+         enableOnAndroid={true}
+         extraScrollHeight={100} // Damos buen espacio extra porque hay muchos inputs
+         keyboardShouldPersistTaps="handled" // IMPORTANTE: Para que los botones (radio buttons) funcionen al primer toque aunque el teclado esté abierto
+      >
           {/* Búsqueda */}
           <Text style={styles.label}>Búsqueda</Text>
           <View style={styles.inputContainer}>
@@ -204,7 +210,7 @@ export const FilterModal = ({ visible, onClose, onApply, onReset, currentFilters
           </View>
 
           <View style={{ height: 40 }} />
-        </ScrollView>
+        </KeyboardAwareScrollView>
 
         <View style={styles.footer}>
           <TouchableOpacity onPress={handleApply} style={styles.applyButton}>

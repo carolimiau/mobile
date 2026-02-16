@@ -11,6 +11,8 @@ import {
   Alert,
   Modal,
   TextInput,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
@@ -342,6 +344,10 @@ export default function AdminPublications() {
         visible={blockModalVisible}
         onRequestClose={() => setBlockModalVisible(false)}
       >
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={{ flex: 1 }}
+      >
         <View style={styles.modalContainer}>
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>Bloquear Publicación</Text>
@@ -369,6 +375,7 @@ export default function AdminPublications() {
             </View>
           </View>
         </View>
+        </KeyboardAvoidingView>
       </Modal>
     </Screen>
   );
