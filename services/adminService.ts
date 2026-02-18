@@ -838,12 +838,21 @@ class AdminService {
   }
 
   async updatePublicationStatus(publicationId: string, status: string): Promise<void> {
+    const statusMap: Record<string, string> = {
+      active: 'Publicada',
+      inactive: 'Desactivada',
+      blocked: 'Bloqueada',
+      pending: 'Pendiente',
+    };
+
+    const mappedStatus = statusMap[status] ?? status;
+
     try {
       const headers = await this.getHeaders();
       const response = await fetch(`${API_URL}/admin/publications/${publicationId}/status`, {
         method: 'PUT',
         headers,
-        body: JSON.stringify({ status }),
+        body: JSON.stringify({ status: mappedStatus }),
       });
 
       if (!response.ok) {
@@ -860,7 +869,7 @@ class AdminService {
   async blockPublication(publicationId: string, reason: string): Promise<void> {
     try {
       const headers = await this.getHeaders();
-      const response = await fetch(`${API_URL}/publications/${publicationId}/block`, {
+      const response = await fetch(`${API_URL}/admin/publications/${publicationId}/block`, {
         method: 'POST',
         headers,
         body: JSON.stringify({ reason }),
@@ -880,10 +889,18 @@ class AdminService {
 
   async deletePublication(publicationId: string): Promise<void> {
     try {
-      // Change deletion semantics: mark publication as blocked
-      return await this.updatePublicationStatus(publicationId, 'blocked');
+      const headers = await this.getHeaders();
+      const response = await fetch(`${API_URL}/admin/publications/${publicationId}`, {
+        method: 'DELETE',
+        headers,
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || 'Error al eliminar la publicación');
+      }
     } catch (error) {
-      console.error('Error deletePublication (block):', error);
+      console.error('Error deletePublication:', error);
       throw error;
     }
   }
