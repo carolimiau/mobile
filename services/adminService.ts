@@ -283,6 +283,27 @@ class AdminService {
     }
   }
 
+  async checkMechanicExistence(rut: string, email: string, phone: string): Promise<{exists: boolean; field?: string; message?: string}> {
+    try {
+      const headers = await this.getHeaders();
+      const response = await fetch(`${API_URL}/admin/mechanics/check-existence`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ rut, email, phone }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || 'Error al verificar disponibilidad');
+      }
+
+      return await response.json();
+    } catch (error: any) {
+      console.error('Error checkMechanicExistence:', error);
+      throw error;
+    }
+  }
+
   async createMechanic(data: {
     firstName: string;
     lastName: string;

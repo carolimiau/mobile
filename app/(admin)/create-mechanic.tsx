@@ -152,6 +152,29 @@ export default function CreateMechanicScreen() {
 
     try {
       setLoading(true);
+      
+      // Validar que el RUT, email y teléfono no existan previamente
+      const cleanRut = formData.rut.replace(/[^0-9kK]/g, '').toUpperCase();
+      const cleanPhone = formData.phone.replace(/\D/g, '');
+      
+      try {
+        const existenceCheck = await adminService.checkMechanicExistence(cleanRut, formData.email, cleanPhone);
+        
+        if (existenceCheck.exists) {
+          Alert.alert(
+            'Datos Duplicados',
+            existenceCheck.message || `${existenceCheck.field} ya está registrado en el sistema. No se puede crear un mecánico con datos duplicados.`,
+            [{ text: 'OK' }]
+          );
+          setLoading(false);
+          return;
+        }
+      } catch (validationError: any) {
+        // Si el endpoint de validación no existe, intentar crear de todas formas
+        // El backend debería manejar la validación
+        console.warn('Advertencia: No se pudo validar duplicados en el servidor', validationError);
+      }
+
       await adminService.createMechanic(formData);
       Alert.alert(
         'Éxito',

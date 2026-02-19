@@ -103,6 +103,35 @@ export default function MechanicDetailScreen() {
     if (!mechanic) return;
     try {
       setSaving(true);
+      
+      // Validar duplicados solo si email o teléfono fueron cambiados
+      const emailChanged = email !== mechanic.email;
+      const phoneChanged = phone !== mechanic.phone;
+      
+      if (emailChanged || phoneChanged) {
+        try {
+          const cleanPhone = phone.replace(/\D/g, '');
+          const existenceCheck = await adminService.checkMechanicExistence(
+            mechanic.id.replace(/[^0-9kK]/g, '').toUpperCase(), 
+            email, 
+            cleanPhone
+          );
+          
+          if (existenceCheck.exists) {
+            Alert.alert(
+              'Datos Duplicados',
+              existenceCheck.message || `${existenceCheck.field} ya está registrado en el sistema.`,
+              [{ text: 'OK' }]
+            );
+            setSaving(false);
+            return;
+          }
+        } catch (validationError: any) {
+          // Si el endpoint de validación no existe, intentar actualizar de todas formas
+          console.warn('Advertencia: No se pudo validar duplicados en el servidor', validationError);
+        }
+      }
+      
       await adminService.updateMechanic(mechanic.id, {
         firstName,
         lastName,
@@ -135,6 +164,42 @@ export default function MechanicDetailScreen() {
       params: { mechanicId: mechanic.id, mechanicName: `${mechanic.firstName} ${mechanic.lastName}` }
     });
   };
+
+  const handleDeleteMechanic = () => {
+    if (!mechanic) return;
+    
+    Alert.alert(
+      'Eliminar Mecánico',
+      `¿Seguro que deseas eliminar a ${mechanic.firstName} ${mechanic.lastName}? Esta acción no se puede deshacer.`,
+      [
+        {
+          text: 'Cancelar',
+          onPress: () => {},
+          style: 'cancel',
+        },
+        {
+          text: 'Eliminar',
+          onPress: async () => {
+            try {
+              setSaving(true);
+              await adminService.deleteMechanic(mechanic.id);
+              Alert.alert(
+                'Éxito',
+                'Mecánico eliminado correctamente',
+                [{ text: 'OK', onPress: () => router.back() }]
+              );
+            } catch (error: any) {
+              console.error('Error deleting mechanic:', error);
+              Alert.alert('Error', error.message || 'No se pudo eliminar el mecánico');
+            } finally {
+              setSaving(false);
+            }
+          },
+          style: 'destructive',
+        },
+      ]
+    );
+  };;
 
   if (loading) {
     return (
@@ -265,8 +330,20 @@ export default function MechanicDetailScreen() {
             </View>
             <Ionicons name="chevron-forward" size={20} color="#999" />
           </TouchableOpacity>
+        </View>
 
-          {/* Add more actions if needed, e.g. View Schedule */}
+        {/* Delete Section */}
+        <View style={styles.deleteSection}>
+          <Button 
+            title={saving ? "Eliminando..." : "Eliminar Mecánico"}
+            variant="danger"
+            size="large"
+            onPress={handleDeleteMechanic}
+            disabled={saving}
+            loading={saving}
+            icon={!saving ? <Ionicons name="trash-outline" size={20} color="#FFF" /> : undefined}
+            style={styles.deleteButton}
+          />
         </View>
 
       </KeyboardAwareScrollView>
@@ -333,6 +410,7 @@ const styles = StyleSheet.create({
   actionsSection: {
     padding: 16,
     backgroundColor: '#fff',
+    marginBottom: 16,
   },
   actionCard: {
     flexDirection: 'row',
@@ -349,4 +427,17 @@ const styles = StyleSheet.create({
   actionContent: { flex: 1 },
   actionTitle: { fontSize: 16, fontWeight: '600', color: '#333' },
   actionSubtitle: { fontSize: 13, color: '#888', marginTop: 2 },
+
+  deleteSection: {
+    padding: 16,
+    backgroundColor: '#FFF8F8',
+    borderTopWidth: 1,
+    borderTopColor: '#FFE0E0',
+    borderBottomWidth: 1,
+    borderBottomColor: '#FFE0E0',
+    marginBottom: 16,
+  },
+  deleteButton: {
+    marginTop: 0,
+  },
 });
