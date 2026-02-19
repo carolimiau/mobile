@@ -112,9 +112,10 @@ export default function MechanicDetailScreen() {
         try {
           const cleanPhone = phone.replace(/\D/g, '');
           const existenceCheck = await adminService.checkMechanicExistence(
-            mechanic.id.replace(/[^0-9kK]/g, '').toUpperCase(), 
-            email, 
-            cleanPhone
+            mechanic.rut ? mechanic.rut.replace(/[^0-9kK]/g, '').toUpperCase() : '',
+            email,
+            cleanPhone,
+            mechanic.id, // excluir el propio mecánico del chequeo de duplicados
           );
           
           if (existenceCheck.exists) {
@@ -127,8 +128,11 @@ export default function MechanicDetailScreen() {
             return;
           }
         } catch (validationError: any) {
-          // Si el endpoint de validación no existe, intentar actualizar de todas formas
-          console.warn('Advertencia: No se pudo validar duplicados en el servidor', validationError);
+          // El endpoint existe — propagar el error para no ocultar problemas de red
+          console.error('Error al validar duplicados:', validationError);
+          Alert.alert('Error', 'No se pudo verificar disponibilidad de datos. Intenta nuevamente.');
+          setSaving(false);
+          return;
         }
       }
       

@@ -13,6 +13,7 @@ export interface Mechanic {
   name?: string;
   email: string;
   phone: string;
+  rut?: string;
   specialization?: string;
   status: 'active' | 'inactive';
   rating?: number;
@@ -283,13 +284,13 @@ class AdminService {
     }
   }
 
-  async checkMechanicExistence(rut: string, email: string, phone: string): Promise<{exists: boolean; field?: string; message?: string}> {
+  async checkMechanicExistence(rut: string, email: string, phone: string, excludeId?: string): Promise<{exists: boolean; field?: string; message?: string}> {
     try {
       const headers = await this.getHeaders();
       const response = await fetch(`${API_URL}/admin/mechanics/check-existence`, {
         method: 'POST',
         headers,
-        body: JSON.stringify({ rut, email, phone }),
+        body: JSON.stringify({ rut, email, phone, excludeId }),
       });
 
       if (!response.ok) {
@@ -366,7 +367,8 @@ class AdminService {
       });
 
       if (!response.ok) {
-        throw new Error('Error al eliminar mecánico');
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || 'Error al eliminar mecánico');
       }
     } catch (error) {
       console.error('Error deleteMechanic:', error);

@@ -170,10 +170,12 @@ export default function CreateMechanicScreen() {
           return;
         }
       } catch (validationError: any) {
-        // Si el endpoint de validación no existe, intentar crear de todas formas
-        // El backend debería manejar la validación
-        console.warn('Advertencia: No se pudo validar duplicados en el servidor', validationError);
-      }
+          // El endpoint existe — propagar el error para no ocultar problemas de red
+          console.error('Error al validar duplicados:', validationError);
+          Alert.alert('Error', 'No se pudo verificar disponibilidad de datos. Intenta nuevamente.');
+          setLoading(false);
+          return;
+        }
 
       await adminService.createMechanic(formData);
       Alert.alert(
