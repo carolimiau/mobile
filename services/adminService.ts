@@ -94,7 +94,7 @@ export interface Sede {
   id: number;
   nombre: string;
   direccion: string;
-  isActive?: boolean;
+  activo?: boolean;
 }
 
 class AdminService {
@@ -133,7 +133,7 @@ class AdminService {
   async getDashboardStats(): Promise<DashboardStats> {
     try {
       const headers = await this.getHeaders();
-      const response = await fetch(`${API_URL}/admin/dashboard/stats`, {
+      const response = await fetch(`${API_URL}/admin/dashboard`, {
         headers,
       });
 
@@ -524,7 +524,7 @@ class AdminService {
   /**
    * getSedes - Obtiene todas las sedes del sistema.
    * No recibe parámetros.
-   * Retorna un arreglo de objetos Sede (id, nombre, direccion, isActive).
+   * Retorna un arreglo de objetos Sede (id, nombre, direccion, activo).
    * Llama a GET /admin/sedes con headers de autenticación.
    */
   async getSedes(): Promise<Sede[]> {
@@ -576,7 +576,7 @@ class AdminService {
    * @param data - Objeto parcial con los campos a modificar:
    *   - nombre? (string): Nuevo nombre de la sede
    *   - direccion? (string): Nueva dirección
-   *   - isActive? (boolean): Estado activo/inactivo de la sede
+   *   - activo? (boolean): Estado activo/inactivo de la sede
    * Retorna el objeto Sede actualizado.
    * Llama a PATCH /admin/sedes/:id con el body JSON y headers de autenticación.
    */
@@ -584,7 +584,7 @@ class AdminService {
     try {
       const headers = await this.getHeaders();
       const response = await fetch(`${API_URL}/admin/sedes/${sedeId}`, {
-        method: 'PATCH',
+        method: 'PUT',
         headers,
         body: JSON.stringify(data),
       });

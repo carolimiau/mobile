@@ -447,10 +447,12 @@ class ApiService {
     return `Hace ${diffInMonths} mes${diffInMonths > 1 ? 'es' : ''}`;
   }
 
-  // Obtener horarios disponibles
+  // Obtener horarios disponibles de una sede para una fecha dada
   async getAvailableSlots(date: string, location?: string): Promise<{ id: number; time: string }[]> {
     try {
-      let url = `/mechanics/available-slots?date=${date}`;
+      // NOTA: el endpoint espera `location` como nombre de la sede.
+      // Retorna array de { id: number; time: string } con los slots disponibles.
+      let url = `/sedes/available-slots?date=${date}`;
       if (location) {
         url += `&location=${encodeURIComponent(location)}`;
       }
