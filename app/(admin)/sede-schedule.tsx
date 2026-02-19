@@ -9,10 +9,12 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import adminService from '../../services/adminService';
+import adminService, { Sede } from '../../services/adminService';
 import { Screen } from '../../components/ui/Screen';
 import { Button } from '../../components/ui/Button';
+import { Select } from '../../components/ui/Select';
 import { useFocusEffect } from '@react-navigation/native';
+import { Ionicons } from '@expo/vector-icons';
 
 const DAYS = [
   { id: 1, name: 'Lunes' },
@@ -26,14 +28,14 @@ const DAYS = [
 
 export default function AdminSedeScheduleScreen() {
   const router = useRouter();
-  // Assuming we are editing the main sede (ID 1)
-  const sedeId = 1;
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [selectedDay, setSelectedDay] = useState<number>(1);
   const [schedules, setSchedules] = useState<Record<number, string[]>>({});
   const [timeSlots, setTimeSlots] = useState<string[]>([]);
+  const [sedes, setSedes] = useState<Sede[]>([]);
+  const [selectedSedeId, setSelectedSedeId] = useState<string>('');
 
   // Initialize empty schedule
   const initializeSchedule = () => {
@@ -53,11 +55,25 @@ export default function AdminSedeScheduleScreen() {
     setTimeSlots(slots);
   };
 
-  const loadSchedule = async () => {
+  const loadSedes = async () => {
     try {
-      const data = await adminService.getSedeSchedule(sedeId);
+      const data = await adminService.getSedes();
+      setSedes(data);
+      if (data.length > 0 && !selectedSedeId) {
+        setSelectedSedeId(String(data[0].id));
+      }
+    } catch (error) {
+      console.error('Error loading sedes:', error);
+      Alert.alert('Error', 'No se pudieron cargar las sedes');
+    }
+  };
+
+  const loadSchedule = async () => {
+    if (!selectedSedeId) return;
+    try {
+      const data = await adminService.getSedeSchedule(Number(selectedSedeId));
       const scheduleMap: Record<number, string[]> = {};
-      
+
       DAYS.forEach(day => {
         scheduleMap[day.id] = [];
       });
@@ -82,7 +98,7 @@ export default function AdminSedeScheduleScreen() {
     setLoading(true);
     initializeSchedule();
     loadTimeSlots();
-    await loadSchedule();
+    await loadSedes();
     setLoading(false);
   };
 
@@ -92,13 +108,27 @@ export default function AdminSedeScheduleScreen() {
     }, [])
   );
 
+  // Cargar horario cuando cambia la sede seleccionada
+  useFocusEffect(
+    useCallback(() => {
+      if (selectedSedeId) {
+        loadSchedule();
+      }
+    }, [selectedSedeId])
+  );
+
+  const handleSedeChange = (value: string) => {
+    setSelectedSedeId(value);
+    initializeSchedule();
+  };
+
   const toggleSlot = (time: string) => {
     setSchedules(prev => {
       const currentSlots = prev[selectedDay] || [];
       const newSlots = currentSlots.includes(time)
         ? currentSlots.filter(t => t !== time)
         : [...currentSlots, time].sort();
-      
+
       return {
         ...prev,
         [selectedDay]: newSlots
@@ -109,14 +139,14 @@ export default function AdminSedeScheduleScreen() {
   const handleRepeatSchedule = () => {
     const currentDaySchedule = schedules[selectedDay] || [];
     const currentDayName = DAYS.find(d => d.id === selectedDay)?.name;
-    
+
     Alert.alert(
       'Repetir Horario',
       `¿Estás seguro de que quieres copiar el horario del ${currentDayName} a todos los demás días?`,
       [
         { text: 'Cancelar', style: 'cancel' },
-        { 
-          text: 'Copiar', 
+        {
+          text: 'Copiar',
           onPress: () => {
             setSchedules(prev => {
               const newSchedules: Record<number, string[]> = {};
@@ -133,16 +163,20 @@ export default function AdminSedeScheduleScreen() {
   };
 
   const handleSave = async () => {
+    if (!selectedSedeId) {
+      Alert.alert('Error', 'Debes seleccionar una sede primero');
+      return;
+    }
     try {
       setSaving(true);
-      
+
       const scheduleArray = Object.entries(schedules).map(([day, slots]) => ({
         dayOfWeek: parseInt(day),
         timeSlots: slots,
         isActive: slots.length > 0
       }));
 
-      await adminService.updateSedeSchedule(sedeId, { schedules: scheduleArray });
+      await adminService.updateSedeSchedule(Number(selectedSedeId), { schedules: scheduleArray });
       Alert.alert('Éxito', 'Horario actualizado correctamente', [
         { text: 'OK', onPress: () => router.back() }
       ]);
@@ -162,10 +196,35 @@ export default function AdminSedeScheduleScreen() {
     );
   }
 
+  if (sedes.length === 0) {
+    return (
+      <Screen style={styles.container}>
+        <View style={styles.header}>
+          <Text style={styles.title}>Horario de Atención</Text>
+        </View>
+        <View style={styles.emptyContainer}>
+          <Ionicons name="business-outline" size={48} color="#999" />
+          <Text style={styles.emptyText}>No hay sedes registradas</Text>
+          <Text style={styles.emptySubtext}>Crea una sede primero para gestionar sus horarios</Text>
+        </View>
+      </Screen>
+    );
+  }
+
   return (
     <Screen style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>Horario de Atención</Text>
+      </View>
+
+      <View style={styles.sedeSelector}>
+        <Select
+          label="Sede"
+          value={selectedSedeId}
+          onChange={handleSedeChange}
+          options={sedes.map(s => ({ label: s.nombre, value: String(s.id) }))}
+          placeholder="Selecciona una sede"
+        />
       </View>
 
       <View style={styles.daysContainer}>
@@ -261,6 +320,31 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 32,
+  },
+  emptyText: {
+    fontSize: 16,
+    color: '#666',
+    marginTop: 12,
+  },
+  emptySubtext: {
+    fontSize: 14,
+    color: '#999',
+    marginTop: 4,
+    textAlign: 'center',
+  },
+  sedeSelector: {
+    backgroundColor: '#FFF',
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: '#EEEEEE',
   },
   daysContainer: {
     backgroundColor: '#FFF',

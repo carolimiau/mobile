@@ -21,7 +21,7 @@ export function usePublishWithInspection() {
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [loadingPlateData, setLoadingPlateData] = useState(false);
   const [plateValid, setPlateValid] = useState<boolean | null>(null);
-  
+
   const [formData, setFormData] = useState({
     plate: '',
     brand: '',
@@ -67,7 +67,7 @@ export function usePublishWithInspection() {
   const loadSedes = async () => {
     try {
       console.log('Loading sedes...');
-      const sedes = await apiService.get('/sedes');
+      const sedes = await apiService.getSedes();
       console.log('Sedes loaded:', sedes);
       if (Array.isArray(sedes)) {
         const formattedSedes = sedes.map((sede: any) => ({
@@ -98,14 +98,14 @@ export function usePublishWithInspection() {
   const loadSettings = async () => {
     try {
       const prices = await apiService.getPrices();
-      
+
       const pubPrice = prices.find(p => p.nombre.toLowerCase() === 'publicacion');
       const inspPrice = prices.find(p => p.nombre.toLowerCase() === 'inspeccion');
 
       if (pubPrice) {
         setPublicationPrice(pubPrice.precio);
       }
-      
+
       if (inspPrice) {
         setInspectionPrice(inspPrice.precio);
       }
@@ -139,7 +139,7 @@ export function usePublishWithInspection() {
       }
 
       const locationName = autoBoxLocations.find(l => l.id === formData.inspectionLocation)?.name || formData.inspectionLocation;
-      
+
       const slots = await apiService.getAvailableSlots(formattedDate, locationName);
       setAvailableTimeSlots(slots || []);
     } catch (error) {
@@ -168,12 +168,12 @@ export function usePublishWithInspection() {
     try {
       setLoadingPlateData(true);
       setPlateValid(null);
-      
+
       console.log('🔍 [usePublishWithInspection] Buscando datos para patente:', plate);
-      
+
       // Primero verificar si la patente ya está publicada
       const availability = await apiService.checkPlateAvailability(plate);
-      
+
       if (!availability.available) {
         setPlateValid(false);
         Alert.alert(
@@ -184,17 +184,17 @@ export function usePublishWithInspection() {
         setLoadingPlateData(false);
         return;
       }
-      
+
       const result = await vehicleService.searchByPlate(plate);
-      
+
       console.log('📬 [usePublishWithInspection] Resultado de vehicleService:', JSON.stringify(result, null, 2));
-      
+
       if (result.success && result.data) {
         console.log('✅ [usePublishWithInspection] Datos a mapear:', JSON.stringify(result.data, null, 2));
-        
+
         // Auto-llenar los campos con los datos encontrados
         const updates: any = {};
-        
+
         if (result.data.brand) updates.brand = result.data.brand;
         if (result.data.model) updates.model = result.data.model;
         if (result.data.year) updates.year = result.data.year.toString();
@@ -209,16 +209,16 @@ export function usePublishWithInspection() {
         if (result.data.engine) updates.motor = result.data.engine;
         if (result.data.vehicleType) updates.tipoVehiculo = result.data.vehicleType;
         if (result.data.monthRT) updates.mesRevisionTecnica = result.data.monthRT;
-        
+
         console.log('📝 Campos que se actualizarán:', updates);
-        
+
         setFormData(prev => ({
           ...prev,
           ...updates
         }));
-        
+
         setPlateValid(true);
-        
+
         const foundFields = Object.keys(updates).join(', ');
         Alert.alert(
           '¡Datos encontrados!',
@@ -348,13 +348,13 @@ export function usePublishWithInspection() {
   const handleNext = () => {
     if (currentStep === 1 && plateValid !== true) {
       Alert.alert(
-        'Patente no validada', 
+        'Patente no validada',
         'Debes ingresar una patente válida antes de continuar. Si no se encuentran datos, puedes completar la información manualmente en el siguiente paso.',
         [{ text: 'Entendido' }]
       );
       return;
     }
-    
+
     if (validateStep()) {
       setCurrentStep(prev => Math.min(prev + 1, totalSteps));
     } else {

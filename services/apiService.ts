@@ -3,8 +3,8 @@ import authService from './authService';
 import { Inspection, Vehicle, User } from '../types';
 import { API_URL } from '../constants/Config';
 
- class ApiService {
-   async fetch(endpoint: string, options?: RequestInit & { requiresAuth?: boolean }) {
+class ApiService {
+  async fetch(endpoint: string, options?: RequestInit & { requiresAuth?: boolean }) {
     try {
       const requiresAuth = options?.requiresAuth !== false;
       let token: string | null = null;
@@ -61,7 +61,7 @@ import { API_URL } from '../constants/Config';
 
       // Verificar si hay contenido antes de parsear JSON
       const text = await response.text();
-      
+
       // Si el texto está vacío o es solo espacios, retornar null
       if (!text || text.trim().length === 0) {
         return null;
@@ -122,7 +122,7 @@ import { API_URL } from '../constants/Config';
     try {
       const user = await authService.getUser();
       if (!user) return [];
-      
+
       let url = `/vehicles/owner/${user.id}`;
       const params = [];
       if (limit !== undefined) params.push(`limit=${limit}`);
@@ -138,7 +138,7 @@ import { API_URL } from '../constants/Config';
 
   // Obtener todos los vehículos
   async getAllVehicles(
-    sortBy?: string, 
+    sortBy?: string,
     sortOrder?: 'ASC' | 'DESC',
     limit?: number,
     offset?: number
@@ -150,7 +150,7 @@ import { API_URL } from '../constants/Config';
       if (sortOrder) params.push(`sortOrder=${sortOrder}`);
       if (limit !== undefined) params.push(`limit=${limit}`);
       if (offset !== undefined) params.push(`offset=${offset}`);
-      
+
       if (params.length > 0) url += `?${params.join('&')}`;
 
       return await this.fetch(url);
@@ -310,11 +310,11 @@ import { API_URL } from '../constants/Config';
   async getVehicleDataByPlate(plate: string): Promise<any> {
     try {
       console.log('🔍 [ApiService] Consultando patente en backend:', plate);
-      
+
       const result = await this.fetch(`/vehicles/api-data/${plate.toUpperCase()}`);
-      
+
       console.log('✅ [ApiService] Datos obtenidos del backend:', JSON.stringify(result, null, 2));
-      
+
       // Verificar si hay datos válidos (al menos marca y modelo)
       if (result && result.brand && result.model) {
         console.log('✅ [ApiService] Datos válidos encontrados');
@@ -331,7 +331,7 @@ import { API_URL } from '../constants/Config';
       }
     } catch (error: any) {
       console.error('❌ [ApiService] Error al consultar patente:', error);
-      
+
       return {
         success: false,
         message: error.message?.includes('404') || error.message?.includes('Not Found')
@@ -346,7 +346,7 @@ import { API_URL } from '../constants/Config';
     try {
       console.log('🔄 Actualizando vehículo:', id);
       console.log('📦 Datos a enviar:', JSON.stringify(data, null, 2));
-      
+
       return await this.fetch(`/vehicles/${id}`, {
         method: 'PATCH',
         body: JSON.stringify(data),
@@ -384,7 +384,7 @@ import { API_URL } from '../constants/Config';
           vehicle: { plate: plate.toUpperCase(), format: 'valid' }
         };
       }
-      return { 
+      return {
         valid: false,
         message: 'Formato de patente inválido'
       };
@@ -442,7 +442,7 @@ import { API_URL } from '../constants/Config';
     if (diffInHours < 1) return 'Hace menos de 1 hora';
     if (diffInHours < 24) return `Hace ${diffInHours} hora${diffInHours > 1 ? 's' : ''}`;
     if (diffInDays < 30) return `Hace ${diffInDays} día${diffInDays > 1 ? 's' : ''}`;
-    
+
     const diffInMonths = Math.floor(diffInDays / 30);
     return `Hace ${diffInMonths} mes${diffInMonths > 1 ? 'es' : ''}`;
   }
@@ -478,25 +478,25 @@ import { API_URL } from '../constants/Config';
     console.log('🔍 [API] getMyInspections - Inicio');
     const token = await authService.getToken();
     console.log('🎫 [API] Token status:', token ? `exists (${token.substring(0, 20)}...)` : 'NO existe');
-    
+
     const queryString = Object.keys(params)
-        .map(key => `${encodeURIComponent(key)}=${encodeURIComponent(params[key])}`)
-        .join('&');
+      .map(key => `${encodeURIComponent(key)}=${encodeURIComponent(params[key])}`)
+      .join('&');
     const url = `/inspections/my-inspections${queryString ? `?${queryString}` : ''}`;
 
     const result = await this.fetch(url);
     console.log('✅ [API] Respuesta recibida:', Array.isArray(result) ? `${result.length} inspecciones` : 'NO es array');
-    
+
     return result;
   }
 
   // Obtener inspecciones de las publicaciones del usuario (como dueño del vehículo)
   async getMyPublicationsInspections(params: any = {}): Promise<Inspection[]> {
     console.log('🔍 [API] getMyPublicationsInspections - Inicio');
-    
+
     const queryString = Object.keys(params)
-        .map(key => `${encodeURIComponent(key)}=${encodeURIComponent(params[key])}`)
-        .join('&');
+      .map(key => `${encodeURIComponent(key)}=${encodeURIComponent(params[key])}`)
+      .join('&');
     const url = `/inspections/my-publications${queryString ? `?${queryString}` : ''}`;
 
     const result = await this.fetch(url);
@@ -534,11 +534,11 @@ import { API_URL } from '../constants/Config';
       }
 
       // Obtener todas las inspecciones de esos vehículos
-      const inspectionsPromises = vehicles.map(vehicle => 
+      const inspectionsPromises = vehicles.map(vehicle =>
         this.getInspectionsByVehicle(vehicle.id)
       );
       const inspectionsArrays = await Promise.all(inspectionsPromises);
-      
+
       // Aplanar el array y agregar información del vehículo
       return inspectionsArrays.flat().map((inspection, index) => ({
         ...inspection,
@@ -711,7 +711,7 @@ import { API_URL } from '../constants/Config';
   async getPublications(filters: any = {}) {
     try {
       const queryParams = new URLSearchParams();
-      
+
       Object.keys(filters).forEach(key => {
         if (filters[key] !== undefined && filters[key] !== '' && filters[key] !== null) {
           queryParams.append(key, filters[key].toString());
@@ -720,11 +720,11 @@ import { API_URL } from '../constants/Config';
 
       const queryString = queryParams.toString();
       const endpoint = queryString ? `/publications?${queryString}` : '/publications';
-      
+
       const publications = await this.get(endpoint);
-      
+
       console.log('Raw publication sample:', publications[0]);
-      
+
       // Map publications to vehicles format expected by UI
       return publications.map((pub: any) => {
         const mapped = {
@@ -816,7 +816,7 @@ import { API_URL } from '../constants/Config';
       // Aplicar filtros localmente
       if (filters.query && filters.query.trim()) {
         const queryLower = filters.query.toLowerCase();
-        vehicles = vehicles.filter(v => 
+        vehicles = vehicles.filter(v =>
           v.marca.toLowerCase().includes(queryLower) ||
           v.modelo.toLowerCase().includes(queryLower) ||
           (v.descripcion && v.descripcion.toLowerCase().includes(queryLower))
@@ -824,13 +824,13 @@ import { API_URL } from '../constants/Config';
       }
 
       if (filters.brand) {
-        vehicles = vehicles.filter(v => 
+        vehicles = vehicles.filter(v =>
           v.marca.toLowerCase() === filters.brand!.toLowerCase()
         );
       }
 
       if (filters.model) {
-        vehicles = vehicles.filter(v => 
+        vehicles = vehicles.filter(v =>
           v.modelo.toLowerCase().includes(filters.model!.toLowerCase())
         );
       }
@@ -860,19 +860,19 @@ import { API_URL } from '../constants/Config';
       }
 
       if (filters.fuelType) {
-        vehicles = vehicles.filter(v => 
+        vehicles = vehicles.filter(v =>
           v.tipoCombustible && v.tipoCombustible.toLowerCase() === filters.fuelType!.toLowerCase()
         );
       }
 
       if (filters.transmission) {
-        vehicles = vehicles.filter(v => 
+        vehicles = vehicles.filter(v =>
           v.transmision && v.transmision.toLowerCase() === filters.transmission!.toLowerCase()
         );
       }
 
       if (filters.location) {
-        vehicles = vehicles.filter(v => 
+        vehicles = vehicles.filter(v =>
           (v.comuna && v.comuna.toLowerCase().includes(filters.location!.toLowerCase())) ||
           (v.region && v.region.toLowerCase().includes(filters.location!.toLowerCase()))
         );
@@ -929,10 +929,10 @@ import { API_URL } from '../constants/Config';
    */
   async updatePushToken(userId: string, pushToken: string) {
     try {
-        console.log(`📡 [API] Updating push token for user ${userId}`);
-        await this.post(`/users/${userId}/push-token`, { pushToken });
+      console.log(`📡 [API] Updating push token for user ${userId}`);
+      await this.post(`/users/${userId}/push-token`, { pushToken });
     } catch (error) {
-        console.error('Error updating push token:', error);
+      console.error('Error updating push token:', error);
     }
   }
 
@@ -1020,7 +1020,7 @@ import { API_URL } from '../constants/Config';
       if (!user) {
         throw new Error('Usuario no autenticado');
       }
-      
+
       let url = `/vehicles/liked/user/${user.id}`;
       const params = [];
       if (limit !== undefined) params.push(`limit=${limit}`);
@@ -1031,6 +1031,23 @@ import { API_URL } from '../constants/Config';
     } catch (error) {
       console.error('Error al obtener vehículos favoritos:', error);
       throw error;
+    }
+  }
+
+  // ==================== SEDES ====================
+
+  /**
+   * getSedes - Obtiene la lista de sedes disponibles.
+   * No requiere parámetros.
+   * Retorna un arreglo de sedes con id, nombre y direccion.
+   * Llama a GET /sedes y retorna array vacío si falla.
+   */
+  async getSedes(): Promise<{ id: number; nombre: string; direccion: string }[]> {
+    try {
+      return await this.get('/sedes');
+    } catch (error) {
+      console.error('Error al obtener sedes:', error);
+      return [];
     }
   }
 

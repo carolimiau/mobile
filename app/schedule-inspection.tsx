@@ -51,7 +51,7 @@ export default function ScheduleInspectionScreen() {
 
   const loadSedes = async () => {
     try {
-      const sedes = await apiService.get('/sedes');
+      const sedes = await apiService.getSedes();
       if (Array.isArray(sedes)) {
         const formattedSedes = sedes.map((sede: any) => ({
           id: String(sede.id),
@@ -77,7 +77,7 @@ export default function ScheduleInspectionScreen() {
       }
 
       const locationName = autoBoxLocations.find(l => l.id === formData.inspectionLocation)?.name || formData.inspectionLocation;
-      
+
       const slots = await apiService.getAvailableSlots(formattedDate, locationName);
       setAvailableTimeSlots(slots || []);
     } catch (error) {
@@ -132,7 +132,7 @@ export default function ScheduleInspectionScreen() {
       <View style={styles.container}>
         <Text style={styles.title}>Agendar Inspección</Text>
         <Text style={styles.subtitle}>Elige dónde y cuándo quieres inspeccionar este auto.</Text>
-        
+
         <Select
           label="Ubicación AutoBox"
           value={formData.inspectionLocation}
@@ -152,15 +152,15 @@ export default function ScheduleInspectionScreen() {
           label="Hora"
           value={formData.inspectionTime}
           onChange={(value) => {
-              updateFormData('inspectionTime', value);
-              const slot = availableTimeSlots.find(s => s.time === value);
-              if (slot) updateFormData('horarioId', slot.id);
+            updateFormData('inspectionTime', value);
+            const slot = availableTimeSlots.find(s => s.time === value);
+            if (slot) updateFormData('horarioId', slot.id);
           }}
           options={availableTimeSlots.map(s => ({ label: s.time, value: s.time }))}
           placeholder="Selecciona hora"
           disabled={!formData.inspectionDate || !formData.inspectionLocation || loadingSlots}
         />
-        
+
         {loadingSlots && <ActivityIndicator size="small" color="#4CAF50" />}
 
         <View style={styles.footer}>

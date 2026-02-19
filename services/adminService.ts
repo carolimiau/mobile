@@ -90,6 +90,13 @@ export interface GlobalSettings {
   };
 }
 
+export interface Sede {
+  id: number;
+  nombre: string;
+  direccion: string;
+  isActive?: boolean;
+}
+
 class AdminService {
   private async getHeaders() {
     const token = await authService.getToken();
@@ -198,8 +205,8 @@ class AdminService {
     try {
       return await apiService.fetch('/users', { requiresAuth: true });
     } catch (error) {
-       console.error('Error fetching users:', error);
-       throw error;
+      console.error('Error fetching users:', error);
+      throw error;
     }
   }
 
@@ -226,12 +233,12 @@ class AdminService {
     try {
       const headers = await this.getHeaders();
       let url = `${API_URL}/admin/mechanics`;
-      
+
       const params = new URLSearchParams();
       if (search) params.append('search', search);
       if (date) params.append('date', date);
       if (time) params.append('time', time);
-      
+
       if (params.toString()) {
         url += `?${params.toString()}`;
       }
@@ -350,7 +357,7 @@ class AdminService {
     try {
       console.log('📡 Llamando a toggle status para mecánico:', id);
       console.log('📍 URL:', `${API_URL}/admin/mechanics/${id}/toggle-status`);
-      
+
       const headers = await this.getHeaders();
       const response = await fetch(`${API_URL}/admin/mechanics/${id}/toggle-status`, {
         method: 'PATCH',
@@ -379,7 +386,7 @@ class AdminService {
       // 1. Obtener URL pre-firmada para subir
       const filename = fileUri.split('/').pop() || 'certificate.pdf';
       const fileKey = `mechanics/${mechanicId}/certificates/${Date.now()}_${filename}`;
-      
+
       const presignedResponse = await fetch(`${API_URL}/uploads/presigned-upload`, {
         method: 'POST',
         headers: await this.getHeaders(),
@@ -398,7 +405,7 @@ class AdminService {
 
       // 2. Subir archivo a S3 usando la URL pre-firmada
       const fileBlob = await fetch(fileUri).then(r => r.blob());
-      
+
       const uploadResponse = await fetch(uploadUrl, {
         method: 'PUT',
         body: fileBlob,
@@ -434,7 +441,7 @@ class AdminService {
     try {
       const filename = fileUri.split('/').pop() || 'profile.jpg';
       const folder = `mechanics/${mechanicId}/profile`;
-      
+
       // 1. Obtener URL pre-firmada
       const presignedResponse = await fetch(`${API_URL}/uploads/presigned-upload`, {
         method: 'POST',
@@ -454,7 +461,7 @@ class AdminService {
 
       // 2. Subir archivo a S3
       const fileBlob = await fetch(fileUri).then(r => r.blob());
-      
+
       const uploadResponse = await fetch(uploadUrl, {
         method: 'PUT',
         body: fileBlob,
@@ -508,6 +515,107 @@ class AdminService {
       return await response.json();
     } catch (error) {
       console.error('Error updateMechanicSchedule:', error);
+      throw error;
+    }
+  }
+
+  // ==================== SEDES ====================
+
+  /**
+   * getSedes - Obtiene todas las sedes del sistema.
+   * No recibe parámetros.
+   * Retorna un arreglo de objetos Sede (id, nombre, direccion, isActive).
+   * Llama a GET /admin/sedes con headers de autenticación.
+   */
+  async getSedes(): Promise<Sede[]> {
+    try {
+      const headers = await this.getHeaders();
+      const response = await fetch(`${API_URL}/admin/sedes`, {
+        headers,
+      });
+      if (!response.ok) {
+        throw new Error('Error al obtener sedes');
+      }
+      return await response.json();
+    } catch (error) {
+      console.error('Error getSedes:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * createSede - Crea una nueva sede en el sistema.
+   * @param data - Objeto con los datos de la sede a crear:
+   *   - nombre (string): Nombre de la sede, ej: "Sede Santiago Centro"
+   *   - direccion (string): Dirección física de la sede
+   * Retorna el objeto Sede creado con su id asignado por el backend.
+   * Llama a POST /admin/sedes con el body JSON y headers de autenticación.
+   */
+  async createSede(data: { nombre: string; direccion: string }): Promise<Sede> {
+    try {
+      const headers = await this.getHeaders();
+      const response = await fetch(`${API_URL}/admin/sedes`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(data),
+      });
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || 'Error al crear sede');
+      }
+      return await response.json();
+    } catch (error) {
+      console.error('Error createSede:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * updateSede - Actualiza los datos de una sede existente.
+   * @param sedeId - ID numérico de la sede a actualizar
+   * @param data - Objeto parcial con los campos a modificar:
+   *   - nombre? (string): Nuevo nombre de la sede
+   *   - direccion? (string): Nueva dirección
+   *   - isActive? (boolean): Estado activo/inactivo de la sede
+   * Retorna el objeto Sede actualizado.
+   * Llama a PATCH /admin/sedes/:id con el body JSON y headers de autenticación.
+   */
+  async updateSede(sedeId: number, data: Partial<Sede>): Promise<Sede> {
+    try {
+      const headers = await this.getHeaders();
+      const response = await fetch(`${API_URL}/admin/sedes/${sedeId}`, {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify(data),
+      });
+      if (!response.ok) {
+        throw new Error('Error al actualizar sede');
+      }
+      return await response.json();
+    } catch (error) {
+      console.error('Error updateSede:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * deleteSede - Elimina una sede del sistema.
+   * @param sedeId - ID numérico de la sede a eliminar
+   * No retorna datos (void).
+   * Llama a DELETE /admin/sedes/:id con headers de autenticación.
+   */
+  async deleteSede(sedeId: number): Promise<void> {
+    try {
+      const headers = await this.getHeaders();
+      const response = await fetch(`${API_URL}/admin/sedes/${sedeId}`, {
+        method: 'DELETE',
+        headers,
+      });
+      if (!response.ok) {
+        throw new Error('Error al eliminar sede');
+      }
+    } catch (error) {
+      console.error('Error deleteSede:', error);
       throw error;
     }
   }
@@ -568,9 +676,9 @@ class AdminService {
       const queryString = Object.keys(params)
         .map(key => `${encodeURIComponent(key)}=${encodeURIComponent(params[key])}`)
         .join('&');
-      
+
       const url = `${API_URL}/inspections${queryString ? `?${queryString}` : ''}`;
-      
+
       const response = await fetch(url, {
         headers,
       });
@@ -581,7 +689,7 @@ class AdminService {
 
       const data = await response.json();
       console.log('📋 Datos crudos de inspecciones:', JSON.stringify(data, null, 2));
-      
+
       // Transformar datos y retornar con marcadores de carga
       const inspections = data.map((inspection: any) => {
         const mechanic = inspection.mecanico || inspection.mechanic;
@@ -593,7 +701,7 @@ class AdminService {
           vehicleBrand: inspection.vehicle?.brand || inspection.vehicleBrand || inspection.publicacion?.vehiculo?.marca || null,
           vehicleModel: inspection.vehicle?.model || inspection.vehicleModel || inspection.publicacion?.vehiculo?.modelo || null,
           mechanicId: inspection.mecanicoId || inspection.mechanicId || mechanic?.id,
-          mechanicName: mechanic 
+          mechanicName: mechanic
             ? `${mechanic.primerNombre || mechanic.firstName || ''} ${mechanic.primerApellido || mechanic.lastName || ''}`.trim()
             : inspection.mechanicName || null,
           mechanicPhoto: mechanic?.foto_url || mechanic?.profilePhoto || null,
@@ -607,7 +715,7 @@ class AdminService {
           mechanicCommission: inspection.mechanicCommission || (inspection.price ? inspection.price * 0.7 : 0),
         };
       });
-      
+
       console.log('✅ Inspecciones transformadas:', inspections);
       return inspections;
     } catch (error) {
@@ -635,7 +743,7 @@ class AdminService {
     try {
       console.log('🌐 Enriqueciendo inspección con patente:', inspection.vehiclePatent);
       const externalData = await this.getVehicleDataByPlate(inspection.vehiclePatent);
-      
+
       if (externalData) {
         return {
           ...inspection,
@@ -666,7 +774,7 @@ class AdminService {
       });
 
       console.log('📡 Response status:', response.status);
-      
+
       if (!response.ok) {
         console.error(`❌ Error en API externa para patente ${plate}:`, response.status);
         const errorText = await response.text();
@@ -676,7 +784,7 @@ class AdminService {
 
       const apiResponse = await response.json();
       console.log('📦 Datos recibidos de API externa:', JSON.stringify(apiResponse, null, 2));
-      
+
       // Verificar que la respuesta sea exitosa
       if (!apiResponse.success || !apiResponse.data) {
         console.error('❌ API retornó success=false o sin data');
@@ -684,13 +792,13 @@ class AdminService {
       }
 
       const data = apiResponse.data;
-      
+
       const result = {
         brand: data.model?.brand?.name || 'Sin información',
         model: data.model?.name || 'Sin información',
         year: data.year || null,
       };
-      
+
       console.log('✅ Datos procesados:', result);
       return result;
     } catch (error) {
@@ -812,12 +920,12 @@ class AdminService {
     try {
       const headers = await this.getHeaders();
       let url = `${API_URL}/admin/publications`;
-      
+
       const params = new URLSearchParams();
       if (status) params.append('status', status);
       if (limit !== undefined) params.append('limit', limit.toString());
       if (offset !== undefined) params.append('offset', offset.toString());
-      
+
       if (params.toString()) {
         url += `?${params.toString()}`;
       }
