@@ -36,7 +36,21 @@ export default function MechanicDetailScreen() {
       // Init form
       setFirstName(data.firstName || '');
       setLastName(data.lastName || '');
-      setPhone(data.phone || '');
+      // Formatear el teléfono desde formato limpio de DB ("56912345678")
+      // al formato visual ("+56 9 1234 5678") para que el input lo muestre correctamente
+      const rawPhone = data.phone || '';
+      let digits = rawPhone.replace(/\D/g, '');
+      if (digits.length >= 3 && digits.startsWith('569')) {
+        const rest = digits.slice(3);
+        let displayPhone = '+56 9 ';
+        if (rest.length > 0) {
+          displayPhone += rest.slice(0, 4);
+          if (rest.length > 4) displayPhone += ' ' + rest.slice(4, 8);
+        }
+        setPhone(displayPhone);
+      } else {
+        setPhone(rawPhone);
+      }
       setProfilePhoto(data.profilePhoto || '');
       setEmail(data.email || '');
 
@@ -63,36 +77,24 @@ export default function MechanicDetailScreen() {
     }
   };
 
-  const handlePhoneChange = (text: string) => {
-    let digits = text.replace(/\D/g, '');
-    
-    // Si borran el prefijo 569, lo restauramos
-    if (digits.length < 3) {
-        digits = '569';
-    }
-    
-    // Si pegan un número sin prefijo, agregamos 569
-    if (!digits.startsWith('569')) {
-        digits = '569' + digits;
-    }
-    
-    // Limitar a 11 dígitos (56 9 XXXX XXXX)
-    if (digits.length > 11) {
-        digits = digits.slice(0, 11);
-    }
-    
-    // Formatear: +56 9 XXXX XXXX
+  // Función pura de formateo de teléfono chileno.
+  // Acepta tanto formato limpio ("56912345678") como con símbolos ("+56 9 1234 5678").
+  const formatPhoneDisplay = (raw: string): string => {
+    let digits = raw.replace(/\D/g, '');
+    if (digits.length < 3) digits = '569';
+    if (!digits.startsWith('569')) digits = '569' + digits;
+    if (digits.length > 11) digits = digits.slice(0, 11);
     let formatted = '+56 9 ';
     const rest = digits.slice(3);
-    
     if (rest.length > 0) {
-        formatted += rest.slice(0, 4);
-        if (rest.length > 4) {
-            formatted += ' ' + rest.slice(4, 8);
-        }
+      formatted += rest.slice(0, 4);
+      if (rest.length > 4) formatted += ' ' + rest.slice(4, 8);
     }
-    
-    setPhone(formatted);
+    return formatted;
+  };
+
+  const handlePhoneChange = (text: string) => {
+    setPhone(formatPhoneDisplay(text));
   };
 
   const handleImageSelected = (uri: string) => {
@@ -106,7 +108,11 @@ export default function MechanicDetailScreen() {
       
       // Validar duplicados solo si email o teléfono fueron cambiados
       const emailChanged = email !== mechanic.email;
-      const phoneChanged = phone !== mechanic.phone;
+      // Comparar en formato limpio (solo dígitos) para no disparar check innecesario
+      // cuando el phone del estado está formateado y el de la DB está limpio
+      const cleanCurrentPhone = phone.replace(/\D/g, '');
+      const cleanOriginalPhone = (mechanic.phone || '').replace(/\D/g, '');
+      const phoneChanged = cleanCurrentPhone !== cleanOriginalPhone;
       
       if (emailChanged || phoneChanged) {
         try {
