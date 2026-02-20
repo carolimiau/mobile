@@ -129,6 +129,7 @@ export default function AdminPublications() {
       await adminService.blockPublication(selectedPublicationId, blockReason);
       Alert.alert('Éxito', 'Publicación bloqueada correctamente');
       setBlockModalVisible(false);
+      setSelectedPublicationId(null);
       loadPublications(1, true);
     } catch (error: any) {
       Alert.alert('Error', error.message || 'No se pudo bloquear la publicación');
@@ -147,6 +148,7 @@ export default function AdminPublications() {
       await adminService.deletePublication(selectedPublicationId);
       Alert.alert('Éxito', 'Publicación eliminada correctamente');
       setDeleteModalVisible(false);
+      setSelectedPublicationId(null);
       loadPublications(1, true);
     } catch (error: any) {
       Alert.alert('Error', error.message || 'No se pudo eliminar la publicación');
@@ -374,7 +376,11 @@ export default function AdminPublications() {
         animationType="slide"
         transparent={true}
         visible={blockModalVisible}
-        onRequestClose={() => setBlockModalVisible(false)}
+        onRequestClose={() => {
+          setBlockModalVisible(false);
+          setSelectedPublicationId(null);
+          setBlockReason('');
+        }}
       >
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -394,7 +400,11 @@ export default function AdminPublications() {
             <View style={styles.modalActions}>
               <TouchableOpacity
                 style={[styles.modalButton, styles.cancelButton]}
-                onPress={() => setBlockModalVisible(false)}
+                onPress={() => {
+                  setBlockModalVisible(false);
+                  setSelectedPublicationId(null);
+                  setBlockReason('');
+                }}
               >
                 <Text style={styles.modalButtonText}>Cancelar</Text>
               </TouchableOpacity>
@@ -414,7 +424,10 @@ export default function AdminPublications() {
         animationType="slide"
         transparent={true}
         visible={deleteModalVisible}
-        onRequestClose={() => setDeleteModalVisible(false)}
+        onRequestClose={() => {
+          setDeleteModalVisible(false);
+          setSelectedPublicationId(null);
+        }}
       >
         <View style={styles.modalContainer}>
           <View style={styles.modalContent}>
@@ -425,7 +438,10 @@ export default function AdminPublications() {
             <View style={styles.modalActions}>
               <TouchableOpacity
                 style={[styles.modalButton, styles.cancelButton]}
-                onPress={() => setDeleteModalVisible(false)}
+                onPress={() => {
+                  setDeleteModalVisible(false);
+                  setSelectedPublicationId(null);
+                }}
                 disabled={loading}
               >
                 <Text style={styles.modalButtonText}>Cancelar</Text>
