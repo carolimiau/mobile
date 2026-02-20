@@ -8,7 +8,8 @@ import {
   View,
   Alert,
   Platform,
-  ScrollView
+  ScrollView,
+  ActivityIndicator
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import authService from '../../services/authService';
@@ -16,6 +17,7 @@ import apiService from '../../services/apiService';
 import { useEffect, useState, useCallback } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import { BottomTabBarProps } from '@react-navigation/bottom-tabs';
+import { UserRole } from '../../types';
 
 function AdminTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
@@ -96,6 +98,44 @@ export default function AdminLayout() {
   const router = useRouter();
   const segments = useSegments();
   const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0);
+  const [isAuthorized, setIsAuthorized] = useState(false);
+  const [isChecking, setIsChecking] = useState(true);
+
+  // Validar que el usuario sea administrador
+  useEffect(() => {
+    const validateAdminAccess = async () => {
+      try {
+        console.log('🔒 [AdminLayout] Validando acceso de administrador...');
+        const user = await authService.getUser();
+        
+        if (!user) {
+          console.log('❌ [AdminLayout] No hay usuario. Redirigiendo a auth...');
+          router.replace('/auth');
+          return;
+        }
+
+        const userRole = String(user.rol || '').trim();
+        console.log('👤 [AdminLayout] User role:', userRole);
+
+        // Verificar si el usuario es administrador
+        if (userRole === 'Administrador' || userRole === UserRole.ADMIN) {
+          console.log('✅ [AdminLayout] Acceso de admin validado');
+          setIsAuthorized(true);
+        } else {
+          console.log('⛔ [AdminLayout] Usuario no es administrador. Redirigiendo a tabs...');
+          Alert.alert('Acceso Denegado', 'No tienes permisos para acceder a esta sección.');
+          router.replace('/(tabs)');
+        }
+      } catch (error) {
+        console.error('❌ [AdminLayout] Error validando acceso:', error);
+        router.replace('/auth');
+      } finally {
+        setIsChecking(false);
+      }
+    };
+
+    validateAdminAccess();
+  }, [router]);
 
   const fetchUnreadNotifications = async () => {
     try {
@@ -149,6 +189,23 @@ export default function AdminLayout() {
     'user-detail'
   ];
   const shouldHideHeader = hideHeaderScreens.includes(currentSegment);
+
+  // Mostrar loading mientras se valida
+  if (isChecking) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#007bff" />
+          <Text style={styles.loadingText}>Validando acceso...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // No renderizar nada si no está autorizado (la navegación se encarga del redireccionamiento)
+  if (!isAuthorized) {
+    return null;
+  }
 
   return (
     <>
@@ -347,6 +404,17 @@ export default function AdminLayout() {
 const styles = StyleSheet.create({
   safeArea: {
     backgroundColor: '#007bff',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: '#666',
   },
   header: {
     flexDirection: 'row',

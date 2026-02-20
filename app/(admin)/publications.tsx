@@ -140,6 +140,9 @@ export default function AdminPublications() {
 
   const confirmDelete = async () => {
     if (!selectedPublicationId) {
+      Alert.alert('Error', 'ID de publicación no válido. Intente nuevamente.');
+      setDeleteModalVisible(false);
+      setSelectedPublicationId(null);
       return;
     }
 
@@ -151,7 +154,9 @@ export default function AdminPublications() {
       setSelectedPublicationId(null);
       loadPublications(1, true);
     } catch (error: any) {
+      console.error('Error al eliminar publicación:', error);
       Alert.alert('Error', error.message || 'No se pudo eliminar la publicación');
+      // El modal permanece abierto para que el usuario pueda reintentar
     } finally {
       setLoading(false);
     }
@@ -447,11 +452,13 @@ export default function AdminPublications() {
                 <Text style={styles.modalButtonText}>Cancelar</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.modalButton, styles.deleteConfirmButton]}
+                style={[styles.modalButton, styles.deleteConfirmButton, loading && styles.disabledButton]}
                 onPress={confirmDelete}
                 disabled={loading}
               >
-                <Text style={styles.modalButtonText}>{loading ? 'Eliminando...' : 'Eliminar'}</Text>
+                <Text style={[styles.modalButtonText, loading && styles.disabledButtonText]}>
+                  {loading ? 'Eliminando...' : 'Eliminar'}
+                </Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -707,6 +714,12 @@ const styles = StyleSheet.create({
   },
   deleteConfirmButton: {
     backgroundColor: '#E53935',
+  },
+  disabledButton: {
+    opacity: 0.6,
+  },
+  disabledButtonText: {
+    opacity: 0.7,
   },
   modalButtonText: {
     color: 'white',

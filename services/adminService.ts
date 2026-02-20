@@ -1019,19 +1019,37 @@ class AdminService {
   }
 
   async deletePublication(publicationId: string): Promise<void> {
+    if (!publicationId || typeof publicationId !== 'string' || publicationId.trim() === '') {
+      throw new Error('ID de publicación no válido');
+    }
+
     try {
       const headers = await this.getHeaders();
-      const response = await fetch(`${API_URL}/admin/publications/${publicationId}`, {
+      const url = `${API_URL}/admin/publications/${publicationId.trim()}`;
+      console.log('🗑️ [AdminService] Eliminando publicación:', url);
+
+      const response = await fetch(url, {
         method: 'DELETE',
         headers,
       });
 
+      console.log('📍 [AdminService] DELETE Response status:', response.status);
+
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || 'Error al eliminar la publicación');
+        let errorMessage = 'Error al eliminar la publicación';
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.message || errorData.error || errorMessage;
+        } catch (parseError) {
+          // Si no es JSON, usa el mensaje por defecto
+          errorMessage = `Error del servidor (${response.status}): ${response.statusText}`;
+        }
+        throw new Error(errorMessage);
       }
+
+      console.log('✅ [AdminService] Publicación eliminada exitosamente');
     } catch (error) {
-      console.error('Error deletePublication:', error);
+      console.error('❌ [AdminService] Error deletePublication:', error);
       throw error;
     }
   }
