@@ -47,6 +47,7 @@ export default function AdminPublications() {
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'active' | 'inactive' | 'blocked'>('all');
   const [blockModalVisible, setBlockModalVisible] = useState(false);
   const [blockReason, setBlockReason] = useState('');
+  const [deleteModalVisible, setDeleteModalVisible] = useState(false);
   const [selectedPublicationId, setSelectedPublicationId] = useState<string | null>(null);
   const PAGE_SIZE = 10;
 
@@ -112,6 +113,11 @@ export default function AdminPublications() {
     setBlockModalVisible(true);
   };
 
+  const handleDeletePress = (id: string) => {
+    setSelectedPublicationId(id);
+    setDeleteModalVisible(true);
+  };
+
   const confirmBlock = async () => {
     if (!selectedPublicationId || !blockReason.trim()) {
       Alert.alert('Error', 'Debe ingresar una razón para bloquear.');
@@ -126,6 +132,24 @@ export default function AdminPublications() {
       loadPublications(1, true);
     } catch (error: any) {
       Alert.alert('Error', error.message || 'No se pudo bloquear la publicación');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const confirmDelete = async () => {
+    if (!selectedPublicationId) {
+      return;
+    }
+
+    try {
+      setLoading(true);
+      await adminService.deletePublication(selectedPublicationId);
+      Alert.alert('Éxito', 'Publicación eliminada correctamente');
+      setDeleteModalVisible(false);
+      loadPublications(1, true);
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'No se pudo eliminar la publicación');
     } finally {
       setLoading(false);
     }
@@ -238,6 +262,14 @@ export default function AdminPublications() {
               <Text style={styles.actionButtonText}>Bloquear</Text>
             </TouchableOpacity>
           )}
+
+          <TouchableOpacity
+            style={[styles.actionButton, styles.deleteButton]}
+            onPress={() => handleDeletePress(item.id)}
+          >
+            <Ionicons name="trash" size={18} color="#FFF" />
+            <Text style={styles.actionButtonText}>Eliminar</Text>
+          </TouchableOpacity>
         </View>
       </View>
     );
@@ -376,6 +408,38 @@ export default function AdminPublications() {
           </View>
         </View>
         </KeyboardAvoidingView>
+      </Modal>
+
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={deleteModalVisible}
+        onRequestClose={() => setDeleteModalVisible(false)}
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Eliminar Publicación</Text>
+            <Text style={styles.modalDescription}>
+              ¿Estás seguro que deseas eliminar esta publicación? Esta acción no se puede deshacer.
+            </Text>
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.cancelButton]}
+                onPress={() => setDeleteModalVisible(false)}
+                disabled={loading}
+              >
+                <Text style={styles.modalButtonText}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.deleteConfirmButton]}
+                onPress={confirmDelete}
+                disabled={loading}
+              >
+                <Text style={styles.modalButtonText}>{loading ? 'Eliminando...' : 'Eliminar'}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
       </Modal>
     </Screen>
   );
@@ -571,6 +635,9 @@ const styles = StyleSheet.create({
   blockButton: {
     backgroundColor: '#F44336',
   },
+  deleteButton: {
+    backgroundColor: '#E53935',
+  },
   modalContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -589,6 +656,12 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginBottom: 12,
     color: '#333',
+  },
+  modalDescription: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 20,
+    lineHeight: 20,
   },
   modalInput: {
     borderWidth: 1,
@@ -615,6 +688,9 @@ const styles = StyleSheet.create({
   },
   confirmButton: {
     backgroundColor: '#F44336',
+  },
+  deleteConfirmButton: {
+    backgroundColor: '#E53935',
   },
   modalButtonText: {
     color: 'white',

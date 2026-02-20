@@ -224,7 +224,7 @@ export default function VehicleDetailScreen() {
               }} 
             />
             <Button 
-              title="Eliminar Publicación" 
+              title="Desactivar Publicación" 
               variant="outline"
               onPress={deactivateVehicle}
               style={{ borderColor: '#F44336', marginTop: 12 }}

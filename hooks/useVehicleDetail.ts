@@ -75,22 +75,22 @@ export function useVehicleDetail() {
     if (!vehicle?.publicationId) return;
     
     Alert.alert(
-      'Eliminar Publicación',
-      '¿Estás seguro que deseas eliminar esta publicación? Esta acción no se puede deshacer',
+      'Desactivar Publicación',
+      '¿Estás seguro que deseas desactivar esta publicación? Podrás reactivarla después',
       [
         { text: 'Cancelar', style: 'cancel' },
         {
-          text: 'Eliminar',
+          text: 'Desactivar',
           style: 'destructive',
           onPress: async () => {
             try {
               await apiService.deactivatePublication(vehicle.publicationId!);
-              Alert.alert('Éxito', 'Publicación eliminada correctamente', [
+              Alert.alert('Éxito', 'Publicación desactivada correctamente', [
                 { text: 'OK', onPress: () => vehicle?.id && loadVehicle(vehicle.id) }
               ]);
             } catch (error: any) {
-              const errorMessage = error.message || 'No se pudo eliminar la publicación';
-              Alert.alert('No se pudo eliminar', errorMessage);
+              const errorMessage = error.message || 'No se pudo desactivar la publicación';
+              Alert.alert('No se pudo desactivar', errorMessage);
             }
           },
         },
