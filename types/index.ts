@@ -16,6 +16,7 @@ export interface User {
   email: string;
   telefono?: string;
   rol?: UserRole;
+  estado?: 'activo' | 'inactivo' | 'bloqueado';
   fechaCreacion?: string;
   fechaNacimiento?: string;
   saldo?: number;

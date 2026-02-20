@@ -204,7 +204,12 @@ class AdminService {
   // Users Management
   async getUsers(): Promise<any[]> {
     try {
-      return await apiService.fetch('/users', { requiresAuth: true });
+      const headers = await this.getHeaders();
+      const response = await fetch(`${API_URL}/admin/users`, { headers });
+      if (!response.ok) throw new Error('Error al obtener usuarios');
+      const data = await response.json();
+      // GET /admin/users retorna { users: [...], total: number }
+      return Array.isArray(data) ? data : (data.users || []);
     } catch (error) {
       console.error('Error fetching users:', error);
       throw error;
@@ -213,6 +218,8 @@ class AdminService {
 
   async getUser(id: string): Promise<any> {
     try {
+      // GET /users/:id retorna la entidad cruda con primerNombre/primerApellido/rol
+      // pero sin campo 'estado'. Lo combinamos con el estado del listado admin.
       return await apiService.fetch(`/users/${id}`, { requiresAuth: true });
     } catch (error) {
       console.error('Error fetching user:', error);
@@ -225,6 +232,27 @@ class AdminService {
       return await apiService.fetch(`/users/${id}/inspections`, { requiresAuth: true });
     } catch (error) {
       console.error('Error fetching user inspections:', error);
+      throw error;
+    }
+  }
+
+  async updateUserStatus(id: string, estado: 'activo' | 'inactivo' | 'bloqueado'): Promise<any> {
+    try {
+      const headers = await this.getHeaders();
+      const response = await fetch(`${API_URL}/admin/users/${id}/status`, {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({ estado }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || 'Error al actualizar estado del usuario');
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('Error updateUserStatus:', error);
       throw error;
     }
   }

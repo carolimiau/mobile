@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, Image, FlatList } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, Image, FlatList, Alert } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Screen } from '../../components/ui/Screen';
@@ -16,6 +16,7 @@ export default function UserDetailScreen() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<Tab>('profile');
+  const [actionLoading, setActionLoading] = useState(false);
   
   // Data for tabs
   const [inspections, setInspections] = useState<any[]>([]);
@@ -71,6 +72,50 @@ export default function UserDetailScreen() {
     }
   };
 
+  const handleUpdateStatus = (nuevoEstado: 'activo' | 'inactivo' | 'bloqueado') => {
+    const labels: Record<string, string> = {
+      activo: 'activar',
+      inactivo: 'desactivar',
+      bloqueado: 'bloquear',
+    };
+    Alert.alert(
+      'Confirmar acción',
+      `¿Estás seguro de que deseas ${labels[nuevoEstado]} a este usuario?`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Confirmar',
+          style: nuevoEstado === 'bloqueado' ? 'destructive' : 'default',
+          onPress: async () => {
+            try {
+              setActionLoading(true);
+              const updated = await adminService.updateUserStatus(id as string, nuevoEstado);
+              setUser(prev => prev ? { ...prev, estado: updated?.estado ?? nuevoEstado } : prev);
+            } catch (error: any) {
+              Alert.alert('Error', error.message || 'No se pudo actualizar el estado del usuario');
+            } finally {
+              setActionLoading(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const getEstadoBadge = (estado?: string) => {
+    const map: Record<string, { color: string; label: string }> = {
+      activo:    { color: '#4CAF50', label: 'Activo' },
+      inactivo:  { color: '#FF9800', label: 'Inactivo' },
+      bloqueado: { color: '#F44336', label: 'Bloqueado' },
+    };
+    const cfg = map[estado ?? 'activo'] ?? map['activo'];
+    return (
+      <View style={[styles.estadoBadge, { backgroundColor: cfg.color }]}>
+        <Text style={styles.estadoBadgeText}>{cfg.label}</Text>
+      </View>
+    );
+  };
+
   const renderTabButton = (tab: Tab, label: string, icon: any) => (
     <TouchableOpacity 
       style={[styles.tabButton, activeTab === tab && styles.tabButtonActive]} 
@@ -121,6 +166,50 @@ export default function UserDetailScreen() {
                  <Text style={styles.balanceLabel}>Saldo Disponible</Text>
                  <Text style={styles.balanceValue}>{paymentService.formatCurrency(user?.saldo || 0)}</Text>
              </View>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Acciones de Administrador</Text>
+          {actionLoading ? (
+            <ActivityIndicator size="small" color="#007bff" style={{ marginVertical: 12 }} />
+          ) : (
+            <View style={styles.actionsContainer}>
+              {user?.estado !== 'inactivo' ? (
+                <TouchableOpacity
+                  style={[styles.actionButton, styles.actionButtonWarning]}
+                  onPress={() => handleUpdateStatus('inactivo')}
+                >
+                  <Ionicons name="pause-circle-outline" size={20} color="#fff" />
+                  <Text style={styles.actionButtonText}>Desactivar Usuario</Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  style={[styles.actionButton, styles.actionButtonSuccess]}
+                  onPress={() => handleUpdateStatus('activo')}
+                >
+                  <Ionicons name="checkmark-circle-outline" size={20} color="#fff" />
+                  <Text style={styles.actionButtonText}>Activar Usuario</Text>
+                </TouchableOpacity>
+              )}
+              {user?.estado !== 'bloqueado' ? (
+                <TouchableOpacity
+                  style={[styles.actionButton, styles.actionButtonDanger]}
+                  onPress={() => handleUpdateStatus('bloqueado')}
+                >
+                  <Ionicons name="ban-outline" size={20} color="#fff" />
+                  <Text style={styles.actionButtonText}>Bloquear Usuario</Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  style={[styles.actionButton, styles.actionButtonSuccess]}
+                  onPress={() => handleUpdateStatus('activo')}
+                >
+                  <Ionicons name="lock-open-outline" size={20} color="#fff" />
+                  <Text style={styles.actionButtonText}>Desbloquear Usuario</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          )}
         </View>
     </ScrollView>
   );
@@ -194,15 +283,20 @@ export default function UserDetailScreen() {
       </View>
 
       <View style={styles.userHeader}>
-           <Image 
-                source={{ uri: user.foto_url || undefined }} 
-                style={styles.avatar}
-                defaultSource={require('../../assets/images/icon.png')} // Fallback if available or empty view with styles
-           />
+           {user.foto_url ? (
+             <Image source={{ uri: user.foto_url }} style={styles.avatar} />
+           ) : (
+             <View style={[styles.avatar, styles.avatarPlaceholder]}>
+               <Text style={styles.avatarInitialLarge}>{user.primerNombre?.[0] || user.email?.[0] || '?'}</Text>
+             </View>
+           )}
            <View style={styles.userHeaderInfo}>
                <Text style={styles.userName}>{user.primerNombre} {user.primerApellido}</Text>
-               <View style={styles.roleTag}>
-                   <Text style={styles.roleTagText}>{user.rol}</Text>
+               <View style={styles.userHeaderBadges}>
+                 <View style={styles.roleTag}>
+                     <Text style={styles.roleTagText}>{user.rol}</Text>
+                 </View>
+                 {getEstadoBadge(user.estado)}
                </View>
            </View>
       </View>
@@ -236,10 +330,25 @@ const styles = StyleSheet.create({
       flexDirection: 'row', padding: 20, backgroundColor: '#fff', alignItems: 'center', marginBottom: 1
   },
   avatar: { width: 60, height: 60, borderRadius: 30, backgroundColor: '#eee', marginRight: 16 },
+  avatarPlaceholder: { justifyContent: 'center', alignItems: 'center', backgroundColor: '#E0E0E0' },
+  avatarInitialLarge: { fontSize: 24, fontWeight: 'bold', color: '#757575' },
   userHeaderInfo: { flex: 1 },
   userName: { fontSize: 20, fontWeight: 'bold', color: '#333' },
-  roleTag: { alignSelf: 'flex-start', backgroundColor: '#E3F2FD', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10, marginTop: 4 },
+  userHeaderBadges: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 },
+  roleTag: { alignSelf: 'flex-start', backgroundColor: '#E3F2FD', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10 },
   roleTagText: { color: '#1976D2', fontSize: 12, fontWeight: '600' },
+  estadoBadge: { alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10 },
+  estadoBadgeText: { color: '#fff', fontSize: 12, fontWeight: '600' },
+
+  actionsContainer: { gap: 10 },
+  actionButton: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    paddingVertical: 12, borderRadius: 10, gap: 8,
+  },
+  actionButtonWarning: { backgroundColor: '#FF9800' },
+  actionButtonDanger:  { backgroundColor: '#F44336' },
+  actionButtonSuccess: { backgroundColor: '#4CAF50' },
+  actionButtonText: { color: '#fff', fontSize: 15, fontWeight: '600' },
 
   tabsContainer: {
       flexDirection: 'row', backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#eee', elevation: 1
