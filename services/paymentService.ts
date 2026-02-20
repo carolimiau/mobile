@@ -2,7 +2,7 @@ import { Alert } from 'react-native';
 import apiService from './apiService';
 
 // ==========================================
-// 1. DEFINICIÓN DE TIPOS (Aquí arreglamos la "cagá")
+// 1. DEFINICIÓN DE TIPOS
 // ==========================================
 
 export enum PaymentStatus {
@@ -10,7 +10,7 @@ export enum PaymentStatus {
   COMPLETED = 'Completado',
   FAILED = 'Fallido',
   REFUNDED = 'Reembolsado',
-  REJECTED = 'Rechazado' // Agregado por si el backend lo envía
+  REJECTED = 'Rechazado'
 }
 
 export enum PaymentMethod {
@@ -20,7 +20,6 @@ export enum PaymentMethod {
   SALDO_AUTOBOX = 'Saldo AutoBox'
 }
 
-// Esta es la interfaz que necesita tu PaymentsScreen.tsx
 export interface Payment {
   id: string;
   usuarioId: string;
@@ -29,26 +28,54 @@ export interface Payment {
   metodo: PaymentMethod | string;
   fechaCreacion: string;
   detalles?: string;
-  // Datos opcionales que a veces vienen populados
   usuario?: {
     nombre: string;
     apellido: string;
     email: string;
   };
-  // Datos técnicos de Webpay
   token?: string;
   idempotencyKey?: string;
   transactionDate?: string;
 }
 
-// Definimos esto aquí para no depender de '../types'
+// Interface alineada con la entidad PagoMecanico del backend
+// y con MechanicPayment de types/index.ts
 export interface MechanicPayment {
-  id: string;
-  mecanicoId: string;
+  id: number;
+  mecanico_id: string;
   monto: number;
   nota?: string;
-  comprobanteUrl?: string;
-  fechaPago?: string;
+  comprobante_url: string;
+  fecha_pago: string;
+  estado?: string;
+  created_at?: string;
+  // Relación mecanico que devuelve el backend (leftJoinAndSelect)
+  mecanico?: {
+    id: string;
+    primerNombre: string;
+    primerApellido: string;
+    email?: string;
+  };
+  // Alias usado por el frontend para mostrar nombre (mapeado al cargar)
+  mechanic?: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    module?: string;
+  };
+  sedeId?: number;
+  sede?: {
+    id: number;
+    nombre: string;
+  };
+}
+
+// Respuesta paginada que devuelve el endpoint GET /admin/mechanic-payments
+export interface MechanicPaymentsResponse {
+  data: MechanicPayment[];
+  total: number;
+  limit: number;
+  offset: number;
 }
 
 export interface FinancialSummary {
@@ -66,28 +93,41 @@ export interface WebpayInitResponse {
 // 2. CONFIGURACIÓN Y SERVICIO
 // ==========================================
 
-// URL A FUEGO (Mantenida por seguridad de entorno)
 const HARDCODED_PAYMENT_URL = 'https://payment-uby0.onrender.com';
 
+/**
+ * Mapea el campo 'mecanico' (snake_case del backend) al alias 'mechanic'
+ * (camelCase) que usa la UI para mostrar nombre del mecánico.
+ */
+function normalizeMechanicPayment(item: MechanicPayment): MechanicPayment {
+  if (item.mecanico && !item.mechanic) {
+    item.mechanic = {
+      id: item.mecanico.id,
+      firstName: item.mecanico.primerNombre,
+      lastName: item.mecanico.primerApellido,
+    };
+  }
+  return item;
+}
+
 const paymentService = {
-  
+
   // ---------------------------------------------------------
-  // 1. INICIAR PAGO WEBPAY (Lógica de Debug/Producción)
+  // 1. INICIAR PAGO WEBPAY
   // ---------------------------------------------------------
-  
+
   async initiateWebPayTransaction(amount: number, buyOrder: string, sessionId: string): Promise<WebpayInitResponse> {
     console.log("🚀 1. INICIANDO PAGO...");
     const targetUrl = `${HARDCODED_PAYMENT_URL}/create`;
-    
+
     try {
-      // ENVIAMOS LAS VARIABLES DUPLICADAS (INGLÉS Y ESPAÑOL)
       const payload = {
-        amount: amount,          // Inglés
-        monto: amount,           // Español
-        buyOrder: buyOrder,      // Inglés
-        ordenCompra: buyOrder,   // Español
-        sessionId: sessionId,    // Inglés
-        idSesion: sessionId,     // Español
+        amount,
+        monto: amount,
+        buyOrder,
+        ordenCompra: buyOrder,
+        sessionId,
+        idSesion: sessionId,
         returnUrl: `${HARDCODED_PAYMENT_URL}/commit`
       };
 
@@ -121,7 +161,6 @@ const paymentService = {
         throw new Error("Invalid JSON response");
       }
 
-      // Normalización de respuesta
       const webpayUrl = data.url || data.response?.url || data.data?.url;
       const webpayToken = data.token || data.response?.token || data.data?.token;
 
@@ -134,9 +173,8 @@ const paymentService = {
 
     } catch (error: any) {
       console.error("❌ ERROR FINAL:", error);
-      // Evitamos doble alerta si ya la lanzamos arriba
       if (!error.message.includes("Error del Servidor") && !error.message.includes("Faltan Datos")) {
-          Alert.alert("Error al cargar WebPay", error.message);
+        Alert.alert("Error al cargar WebPay", error.message);
       }
       throw error;
     }
@@ -179,7 +217,6 @@ const paymentService = {
   async getFinancialSummary(): Promise<FinancialSummary> {
     try {
       const response = await apiService.get('/payments/summary/financial');
-      // Aseguramos que devuelva la estructura correcta aunque falle o venga vacío
       return response || { totalConfirmed: 0, totalUserBalance: 0, totalMechanicWithdrawals: 0 };
     } catch (error) {
       return { totalConfirmed: 0, totalUserBalance: 0, totalMechanicWithdrawals: 0 };
@@ -190,12 +227,54 @@ const paymentService = {
   // 3. GESTIÓN DE PAGOS A MECÁNICOS
   // ---------------------------------------------------------
 
+  /**
+   * getMechanicPayouts — Pagos de UN mecánico específico (vista del mecánico).
+   * Endpoint: GET /admin/mechanics/:id/payouts  →  MechanicsService.getPayouts()
+   * FIX: Antes llamaba a /payments/mechanic/:id (ruta inexistente).
+   */
   async getMechanicPayouts(mechanicId: string): Promise<MechanicPayment[]> {
     try {
-      const response = await apiService.get(`/payments/mechanic/${mechanicId}`);
-      return response || [];
+      const response = await apiService.get(`/mechanics/${mechanicId}/payouts`);
+      const items: MechanicPayment[] = response || [];
+      return items.map(normalizeMechanicPayment);
     } catch (error) {
       console.error('Error obteniendo pagos del mecánico:', error);
+      return [];
+    }
+  },
+
+  /**
+   * getAllMechanicPayouts — Todos los pagos a mecánicos (vista admin con filtros).
+   * Endpoint: GET /admin/mechanic-payments (con query params opcionales)
+   * FIX: Antes llamaba a /admin/mechanic-payouts (ruta inexistente en el controller).
+   * FIX: El backend devuelve { data, total, limit, offset } — se extrae data[].
+   */
+  async getAllMechanicPayouts(
+    sedeId?: number,
+    mechanicId?: string,
+    startDate?: string,
+    endDate?: string,
+    limit?: number,
+    offset?: number,
+  ): Promise<MechanicPayment[]> {
+    try {
+      const params = new URLSearchParams();
+      if (sedeId !== undefined) params.append('sedeId', sedeId.toString());
+      if (mechanicId) params.append('mechanicId', mechanicId);
+      if (startDate) params.append('startDate', startDate);
+      if (endDate) params.append('endDate', endDate);
+      if (limit !== undefined) params.append('limit', limit.toString());
+      if (offset !== undefined) params.append('offset', offset.toString());
+
+      const query = params.toString() ? `?${params.toString()}` : '';
+      const response: MechanicPaymentsResponse = await apiService.get(`/admin/mechanic-payments${query}`);
+
+      // FIX CRÍTICO: el backend devuelve { data: [], total, limit, offset }
+      // El frontend esperaba un array directo → crash silencioso con .filter()
+      const items: MechanicPayment[] = response?.data || [];
+      return items.map(normalizeMechanicPayment);
+    } catch (error) {
+      console.error('Error obteniendo todos los pagos a mecánicos:', error);
       return [];
     }
   },
@@ -208,10 +287,9 @@ const paymentService = {
       formData.append('nota', note || '');
 
       if (receiptImage) {
-        // TypeScript a veces reclama por el tipo de archivo en FormData, usamos 'any' para evitar bloqueo
         const fileToUpload: any = {
           uri: receiptImage.uri,
-          type: 'image/jpeg', // O el tipo mime real si lo tienes
+          type: 'image/jpeg',
           name: receiptImage.fileName || `receipt-${Date.now()}.jpg`,
         };
         formData.append('comprobante', fileToUpload);

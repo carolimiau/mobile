@@ -322,6 +322,15 @@ export default function AdminLayout() {
             ),
           }} 
         />
+        <Tabs.Screen 
+          name="all-mechanic-payments" 
+          options={{
+            title: 'Pagos Mec.',
+            tabBarIcon: ({ color, size }) => (
+              <Ionicons name="cash" size={size} color={color} />
+            ),
+          }} 
+        />
 
         {/* Pantallas ocultas del TabBar */}
         <Tabs.Screen 

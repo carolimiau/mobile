@@ -31,7 +31,7 @@ export interface Vehicle {
   anio: number;
   fechaCreacion: string;
   userId: string;
-  
+
   // Spanish fields (DB Schema)
   kilometraje?: number;
   valor?: number;
@@ -76,6 +76,15 @@ export interface Payment {
   fechaActualizacion?: string;
 }
 
+/**
+ * MechanicPayment — Refleja la entidad PagoMecanico del backend.
+ *
+ * Campos snake_case (mecanico_id, comprobante_url, fecha_pago) son los que
+ * persiste la DB y devuelve el ORM. El campo 'mecanico' es la relación
+ * TypeORM (leftJoinAndSelect). El alias 'mechanic' (camelCase) es
+ * generado en paymentService.normalizeMechanicPayment() para compatibilidad
+ * con la UI.
+ */
 export interface MechanicPayment {
   id: number;
   mecanico_id: string;
@@ -83,7 +92,27 @@ export interface MechanicPayment {
   fecha_pago: string;
   comprobante_url: string;
   nota?: string;
-  created_at: string;
+  estado?: string;
+  created_at?: string;
+  // Relación ORM del backend (TypeORM leftJoinAndSelect → 'mecanico')
+  mecanico?: {
+    id: string;
+    primerNombre: string;
+    primerApellido: string;
+    email?: string;
+  };
+  // Alias camelCase generado por paymentService para uso en la UI
+  mechanic?: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    module?: string;
+  };
+  sedeId?: number;
+  sede?: {
+    id: number;
+    nombre: string;
+  };
 }
 
 export interface Message {
