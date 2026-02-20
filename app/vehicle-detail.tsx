@@ -82,10 +82,14 @@ export default function VehicleDetailScreen() {
   };
 
   const handleRefundRequest = () => {
+    if (!vehicle?.publicationId) {
+      Alert.alert('Error', 'No se pudo identificar la publicación para solicitar el reembolso.');
+      return;
+    }
     router.push({
       pathname: '/request-refund',
       params: { 
-        publicationId: vehicle.publicationId || vehicle.id 
+        publicationId: vehicle.publicationId
       }
     });
   };
