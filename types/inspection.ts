@@ -15,6 +15,17 @@ export interface Inspection {
   rating?: number;
   answers?: Record<string, string>;
   comments?: Record<string, string>;
+  inspectionAnswers?: Array<{
+    id: string;
+    preguntaId: number;
+    respuestaOpcionId?: number;
+    respuestaTextoManual?: string;
+    imagen_url?: string;
+    pregunta?: { id: number; pregunta: string };
+    respuestaOpcion?: { id: number; respuestaTexto: string; calificacion: number };
+  }>;
+  score?: number;
+  maxScore?: number;
   
   // Relaciones (opcionales dependiendo de la query)
   solicitante?: {
